@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -8,7 +9,7 @@ import pytest
 import respx
 from fastapi.testclient import TestClient
 
-from app.routes.chat import stream_error_event, stream_upstream_body
+from app.routes.chat import count_content_chars, stream_error_event, stream_upstream_body
 
 COMPLETION = {
     "id": "chatcmpl-1",
@@ -185,7 +186,9 @@ def test_stream_upstream_body_relays_each_chunk_separately() -> None:
     upstream_response = httpx.Response(200, content=sse_stream())
 
     async def collect_chunks() -> list[bytes]:
-        return [chunk async for chunk in stream_upstream_body(upstream_response)]
+        return [
+            chunk async for chunk in stream_upstream_body(upstream_response, time.perf_counter())
+        ]
 
     received_chunks = asyncio.run(collect_chunks())
 
@@ -196,7 +199,7 @@ def test_stream_upstream_body_closes_upstream_when_consumer_stops_early() -> Non
     upstream_response = httpx.Response(200, content=sse_stream())
 
     async def read_first_chunk_then_stop() -> bytes:
-        body = stream_upstream_body(upstream_response)
+        body = stream_upstream_body(upstream_response, time.perf_counter())
         first_chunk = await anext(body)
         await body.aclose()
         return first_chunk
@@ -310,9 +313,113 @@ def test_stream_upstream_body_closes_upstream_after_mid_stream_failure() -> None
     upstream_response = httpx.Response(200, content=broken_sse_stream())
 
     async def collect_chunks() -> list[bytes]:
-        return [chunk async for chunk in stream_upstream_body(upstream_response)]
+        return [
+            chunk async for chunk in stream_upstream_body(upstream_response, time.perf_counter())
+        ]
 
     received_chunks = asyncio.run(collect_chunks())
 
     assert received_chunks == [SSE_CHUNKS[0], stream_error_event()]
     assert upstream_response.is_closed
+
+
+def test_count_content_chars_adds_up_text_contents_only() -> None:
+    messages: list[dict[str, Any]] = [
+        {"role": "user", "content": "12345"},
+        {"role": "assistant", "content": None, "tool_calls": []},
+        {"role": "user", "content": [{"type": "image_url", "image_url": {"url": "x"}}]},
+        {"role": "user", "content": "123"},
+    ]
+
+    assert count_content_chars(messages) == 8
+
+
+def test_chat_completion_logs_its_lifecycle_in_order(
+    client: TestClient, upstream: respx.MockRouter, log_entries: list[dict[str, Any]]
+) -> None:
+    upstream.post("/chat/completions").mock(return_value=httpx.Response(200, json=COMPLETION))
+
+    client.post(
+        "/v1/chat/completions",
+        json={"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "Hello"}]},
+        headers={"X-Request-ID": "caller-id-6"},
+    )
+
+    assert [entry["event"] for entry in log_entries] == [
+        "request_received",
+        "prompt_injected",
+        "upstream_request_sent",
+        "upstream_response_received",
+        "request_completed",
+    ]
+    assert all(entry["request_id"] == "caller-id-6" for entry in log_entries)
+    prompt_injected = log_entries[1]
+    assert prompt_injected["model"] == "gpt-4o-mini"
+    assert prompt_injected["stream"] is False
+    assert prompt_injected["message_count"] == 1
+    assert prompt_injected["content_chars"] == 5
+    assert log_entries[3]["status_code"] == 200
+    assert log_entries[3]["latency_ms"] >= 0
+
+
+def test_streaming_chat_completion_logs_its_lifecycle_in_order(
+    client: TestClient, upstream: respx.MockRouter, log_entries: list[dict[str, Any]]
+) -> None:
+    upstream.post("/chat/completions").mock(
+        return_value=httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, content=sse_stream()
+        )
+    )
+
+    client.post(
+        "/v1/chat/completions",
+        json={"model": "gpt-4o-mini", "messages": [], "stream": True},
+    )
+
+    assert [entry["event"] for entry in log_entries] == [
+        "request_received",
+        "prompt_injected",
+        "upstream_request_sent",
+        "upstream_response_received",
+        "upstream_first_byte",
+        "stream_completed",
+        "request_completed",
+    ]
+    assert len({entry["request_id"] for entry in log_entries}) == 1
+    stream_completed = log_entries[5]
+    assert stream_completed["chunk_count"] == len(SSE_CHUNKS)
+    assert stream_completed["bytes"] == len(b"".join(SSE_CHUNKS))
+
+
+def test_logs_contain_no_secrets_and_no_message_content(
+    client: TestClient,
+    upstream: respx.MockRouter,
+    log_entries: list[dict[str, Any]],
+    system_prompt: str,
+) -> None:
+    error = {"error": {"message": "Incorrect API key provided", "type": "invalid_request_error"}}
+    upstream.post("/chat/completions").mock(
+        side_effect=[
+            httpx.Response(
+                200, headers={"content-type": "text/event-stream"}, content=sse_stream()
+            ),
+            httpx.Response(401, json=error),
+        ]
+    )
+    request_body = {
+        "model": "gpt-4o-mini",
+        "messages": [{"role": "user", "content": "my private pasted text"}],
+    }
+    headers = {"Authorization": "Bearer key-from-open-webui"}
+
+    client.post("/v1/chat/completions", json=request_body | {"stream": True}, headers=headers)
+    client.post("/v1/chat/completions", json=request_body, headers=headers)
+
+    all_log_text = json.dumps(log_entries).lower()
+    assert len(log_entries) > 0
+    assert "sk-test" not in all_log_text
+    assert "key-from-open-webui" not in all_log_text
+    assert "authorization" not in all_log_text
+    assert "bearer" not in all_log_text
+    assert "my private pasted text" not in all_log_text
+    assert system_prompt.lower() not in all_log_text

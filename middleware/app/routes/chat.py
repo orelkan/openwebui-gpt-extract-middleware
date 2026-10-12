@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -10,7 +11,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
-from app.logging import log_event
+from app.logging import elapsed_ms, log_event
 from app.prompt import inject_system_prompt
 from app.upstream import passthrough_response
 
@@ -30,6 +31,13 @@ class ChatCompletionRequest(BaseModel):
     model: str
     messages: list[dict[str, Any]]
     stream: bool = False
+
+
+def count_content_chars(messages: list[dict[str, Any]]) -> int:
+    """Total length of the text contents, for logging sizes without logging the text."""
+    return sum(
+        len(message["content"]) for message in messages if isinstance(message.get("content"), str)
+    )
 
 
 def build_upstream_payload(chat_request: ChatCompletionRequest, prompt: str) -> dict[str, Any]:
@@ -61,8 +69,13 @@ def stream_error_event() -> bytes:
     return f"\n\ndata: {json.dumps(error)}\n\ndata: [DONE]\n\n".encode()
 
 
-async def stream_upstream_body(upstream_response: httpx.Response) -> AsyncGenerator[bytes, None]:
+async def stream_upstream_body(
+    upstream_response: httpx.Response, sent_at: float
+) -> AsyncGenerator[bytes, None]:
     """Yield the upstream body chunk by chunk, then release the upstream connection.
+
+    `sent_at` is the time.perf_counter() reading taken when the request went
+    upstream; the logged latencies are measured from it.
 
     If upstream fails mid-stream, the status line is already sent and cannot
     change, so the failure is reported inside the stream. It is never retried:
@@ -71,9 +84,22 @@ async def stream_upstream_body(upstream_response: httpx.Response) -> AsyncGenera
     The finally block also runs when our client disconnects mid-stream, so an
     abandoned request does not keep its upstream connection open.
     """
+    chunk_count = 0
+    byte_count = 0
     try:
         async for chunk in upstream_response.aiter_bytes():
+            if chunk_count == 0:
+                log_event(logger, "upstream_first_byte", latency_ms=elapsed_ms(sent_at))
+            chunk_count += 1
+            byte_count += len(chunk)
             yield chunk
+        log_event(
+            logger,
+            "stream_completed",
+            chunk_count=chunk_count,
+            bytes=byte_count,
+            duration_ms=elapsed_ms(sent_at),
+        )
     except httpx.TransportError as error:
         log_event(
             logger,
@@ -88,21 +114,43 @@ async def stream_upstream_body(upstream_response: httpx.Response) -> AsyncGenera
         await upstream_response.aclose()
 
 
+def log_upstream_response(upstream_response: httpx.Response, sent_at: float) -> None:
+    """Log the status upstream answered with and how long it took to answer."""
+    log_event(
+        logger,
+        "upstream_response_received",
+        status_code=upstream_response.status_code,
+        latency_ms=elapsed_ms(sent_at),
+    )
+
+
 async def forward_streaming(
     upstream_client: httpx.AsyncClient, payload: dict[str, Any]
 ) -> Response:
     """Send a streaming request upstream and relay the SSE stream as it arrives."""
+    sent_at = time.perf_counter()
     upstream_request = upstream_client.build_request("POST", "/chat/completions", json=payload)
     upstream_response = await upstream_client.send(upstream_request, stream=True)
+    log_upstream_response(upstream_response, sent_at)
     if upstream_response.status_code != httpx.codes.OK:
         # An error answer is a small JSON document, not a stream: read it whole
         # (which also closes it) and return it like a non-streaming response.
         await upstream_response.aread()
         return passthrough_response(upstream_response)
     return StreamingResponse(
-        stream_upstream_body(upstream_response),
+        stream_upstream_body(upstream_response, sent_at),
         media_type="text/event-stream",
     )
+
+
+async def forward_non_streaming(
+    upstream_client: httpx.AsyncClient, payload: dict[str, Any]
+) -> Response:
+    """Send a request upstream, wait for the whole answer and return it."""
+    sent_at = time.perf_counter()
+    upstream_response = await upstream_client.post("/chat/completions", json=payload)
+    log_upstream_response(upstream_response, sent_at)
+    return passthrough_response(upstream_response)
 
 
 @router.post("/v1/chat/completions")
@@ -110,7 +158,21 @@ async def chat_completions(chat_request: ChatCompletionRequest, request: Request
     """Forward a chat completion request to upstream and return its answer."""
     upstream_client: httpx.AsyncClient = request.app.state.upstream_client
     payload = build_upstream_payload(chat_request, request.app.state.system_prompt)
+    log_event(
+        logger,
+        "prompt_injected",
+        model=chat_request.model,
+        stream=chat_request.stream,
+        message_count=len(chat_request.messages),
+        content_chars=count_content_chars(chat_request.messages),
+    )
+    log_event(
+        logger,
+        "upstream_request_sent",
+        path="/chat/completions",
+        model=chat_request.model,
+        stream=chat_request.stream,
+    )
     if chat_request.stream:
         return await forward_streaming(upstream_client, payload)
-    upstream_response = await upstream_client.post("/chat/completions", json=payload)
-    return passthrough_response(upstream_response)
+    return await forward_non_streaming(upstream_client, payload)

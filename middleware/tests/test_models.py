@@ -1,3 +1,5 @@
+from typing import Any
+
 import httpx
 import pytest
 import respx
@@ -59,3 +61,20 @@ def test_list_models_maps_upstream_failure_to_gateway_error(
 
     assert response.status_code == expected_status
     assert response.json()["error"]["type"] == expected_type
+
+
+def test_list_models_logs_the_upstream_call(
+    client: TestClient, upstream: respx.MockRouter, log_entries: list[dict[str, Any]]
+) -> None:
+    upstream.get("/models").mock(return_value=httpx.Response(200, json={"data": []}))
+
+    client.get("/v1/models")
+
+    assert [entry["event"] for entry in log_entries] == [
+        "request_received",
+        "upstream_request_sent",
+        "upstream_response_received",
+        "request_completed",
+    ]
+    assert log_entries[1]["path"] == "/models"
+    assert log_entries[2]["status_code"] == 200
