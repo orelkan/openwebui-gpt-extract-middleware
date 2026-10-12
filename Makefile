@@ -1,4 +1,4 @@
-.PHONY: install format lint typecheck test check run samples
+.PHONY: install format lint typecheck test check run samples up down logs
 
 install:
 	cd middleware && uv sync
@@ -27,3 +27,16 @@ run:
 # e.g. make samples ARGS="--case receipt --verbose"
 samples:
 	cd middleware && uv run --env-file ../.env python -m prompt_eval.run_samples $(ARGS)
+
+# Builds the middleware image and starts the whole stack (Open WebUI,
+# PostgreSQL, middleware). Returns when all three are healthy. Needs .env.
+up:
+	docker compose up -d --build --wait
+
+# Stops the stack. Chats and settings stay in the named volumes; add
+# `docker compose down -v` by hand to delete them.
+down:
+	docker compose down
+
+logs:
+	docker compose logs -f middleware
