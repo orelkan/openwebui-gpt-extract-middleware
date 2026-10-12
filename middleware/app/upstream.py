@@ -62,19 +62,17 @@ def passthrough_response(upstream_response: httpx.Response) -> Response:
     replaced by an OpenAI-shaped error with the same status.
     """
     if upstream_response.is_success:
-        return Response(
-            content=upstream_response.content,
-            status_code=upstream_response.status_code,
-            media_type=upstream_response.headers.get("content-type"),
+        media_type = upstream_response.headers.get("content-type")
+    elif is_json(upstream_response.content):
+        media_type = "application/json"
+    else:
+        return openai_error_response(
+            upstream_response.status_code,
+            f"The upstream API returned HTTP {upstream_response.status_code}",
+            "upstream_error",
         )
-    if is_json(upstream_response.content):
-        return Response(
-            content=upstream_response.content,
-            status_code=upstream_response.status_code,
-            media_type="application/json",
-        )
-    return openai_error_response(
-        upstream_response.status_code,
-        f"The upstream API returned HTTP {upstream_response.status_code}",
-        "upstream_error",
+    return Response(
+        content=upstream_response.content,
+        status_code=upstream_response.status_code,
+        media_type=media_type,
     )
