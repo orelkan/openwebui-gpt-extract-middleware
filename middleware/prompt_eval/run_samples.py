@@ -9,6 +9,7 @@ import logging
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -104,6 +105,52 @@ def build_model_settings(arguments: argparse.Namespace) -> dict[str, Any]:
     return model_settings
 
 
+@dataclass(frozen=True)
+class CaseSummary:
+    """The numbers one case contributes to the totals."""
+
+    passed_runs: int
+    tokens: int
+    shared_names: int = 0
+    total_names: int = 0
+    shared_values: int = 0
+    total_values: int = 0
+
+
+def report_case(case: Case, case_results: list[tuple[str, int]], verbose: bool) -> CaseSummary:
+    """Check every repeat of one case, print its result line and return its numbers."""
+    replies = [reply for reply, _ in case_results]
+    tokens = sum(reply_tokens for _, reply_tokens in case_results)
+    failures = []
+    for run, reply in enumerate(replies, start=1):
+        problems = check_case(case, reply)
+        if problems:
+            failures.append((run, problems))
+        if verbose:
+            logger.info("--- %s, run %d\n%s", case.name, run, reply)
+
+    passed_runs = len(replies) - len(failures)
+    summary = CaseSummary(passed_runs=passed_runs, tokens=tokens)
+    consistency = ""
+    if case.expects_extraction:
+        shared_names, total_names = count_shared(replies, "name")
+        shared_values, total_values = count_shared(replies, "value")
+        summary = CaseSummary(
+            passed_runs, tokens, shared_names, total_names, shared_values, total_values
+        )
+        consistency = (
+            f"  in every repeat: {shared_names}/{total_names} names, "
+            f"{shared_values}/{total_values} values"
+        )
+
+    verdict = "PASS" if not failures else "FAIL"
+    logger.info("%s %d/%d  %-21s%s", verdict, passed_runs, len(replies), case.name, consistency)
+    for run, problems in failures:
+        for problem in problems:
+            logger.info("       run %d: %s", run, problem)
+    return summary
+
+
 def main() -> int:
     """Run the selected cases and return the process exit code (0 when all passed)."""
     arguments = parse_arguments()
@@ -115,11 +162,6 @@ def main() -> int:
     prompt = load_system_prompt(settings.system_prompt_path)
     model_settings = build_model_settings(arguments)
     cases = [case for case in CASES if arguments.case in (None, case.name)]
-    passed_runs = 0
-    total_tokens = 0
-    # [shared, total], summed over all extraction cases.
-    name_agreement = [0, 0]
-    value_agreement = [0, 0]
 
     started_at = time.perf_counter()
     with httpx.Client(
@@ -132,50 +174,25 @@ def main() -> int:
         )
     elapsed_seconds = time.perf_counter() - started_at
 
-    for case, case_results in zip(cases, results, strict=True):
-        replies = []
-        failures = []
-        for run, (reply, tokens) in enumerate(case_results, start=1):
-            replies.append(reply)
-            total_tokens += tokens
-            problems = check_case(case, reply)
-            if problems:
-                failures.append((run, problems))
-            else:
-                passed_runs += 1
-            if arguments.verbose:
-                logger.info("--- %s, run %d\n%s", case.name, run, reply)
+    summaries = [
+        report_case(case, case_results, arguments.verbose)
+        for case, case_results in zip(cases, results, strict=True)
+    ]
 
-        verdict = "PASS" if not failures else "FAIL"
-        passed = arguments.runs - len(failures)
-        consistency = ""
-        if case.expects_extraction:
-            shared_names, total_names = count_shared(replies, "name")
-            shared_values, total_values = count_shared(replies, "value")
-            name_agreement[0] += shared_names
-            name_agreement[1] += total_names
-            value_agreement[0] += shared_values
-            value_agreement[1] += total_values
-            consistency = (
-                f"  in every repeat: {shared_names}/{total_names} names, "
-                f"{shared_values}/{total_values} values"
-            )
-        logger.info("%s %d/%d  %-21s%s", verdict, passed, arguments.runs, case.name, consistency)
-        for run, problems in failures:
-            for problem in problems:
-                logger.info("       run %d: %s", run, problem)
-
+    passed_runs = sum(summary.passed_runs for summary in summaries)
     total_runs = len(cases) * arguments.runs
     logger.info("\n%d/%d runs passed", passed_runs, total_runs)
     logger.info(
         "in every repeat of their case: %d/%d field names, %d/%d values",
-        *name_agreement,
-        *value_agreement,
+        sum(summary.shared_names for summary in summaries),
+        sum(summary.total_names for summary in summaries),
+        sum(summary.shared_values for summary in summaries),
+        sum(summary.total_values for summary in summaries),
     )
     logger.info(
         "settings %s, %d tokens used, %.0f seconds",
         model_settings,
-        total_tokens,
+        sum(summary.tokens for summary in summaries),
         elapsed_seconds,
     )
     return 0 if passed_runs == total_runs else 1
