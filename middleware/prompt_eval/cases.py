@@ -24,30 +24,38 @@ class Case:
     # Part of the name of a field that must be flagged uncertain.
     uncertain_field: str | None = None
     expects_warning: bool = False
+    # Fewest entries `fields` may have; catches a well-formed but empty extraction.
+    min_fields: int = 0
     # Text the prose answer must contain.
     answer_mentions: str | None = None
 
 
 CASES = [
-    Case(name="email", sample="email.txt", document_type="email", language="en"),
-    Case(name="receipt", sample="receipt.txt", document_type="receipt", language="en"),
-    Case(name="job_listing", sample="job_listing.txt", language="en"),
-    Case(name="medical_report", sample="medical_report.txt", language="en"),
-    Case(name="legal_paragraph", sample="legal_paragraph.txt", language="en"),
+    Case(name="email", sample="email.txt", document_type="email", language="en", min_fields=6),
+    Case(
+        name="receipt", sample="receipt.txt", document_type="receipt", language="en", min_fields=6
+    ),
+    Case(name="job_listing", sample="job_listing.txt", language="en", min_fields=6),
+    Case(name="medical_report", sample="medical_report.txt", language="en", min_fields=6),
+    Case(name="legal_paragraph", sample="legal_paragraph.txt", language="en", min_fields=3),
     Case(
         name="invoice_no_year",
         sample="invoice_no_year.txt",
         document_type="invoice",
         uncertain_field="due",
+        min_fields=4,
     ),
-    Case(name="non_english", sample="non_english.txt", language="es"),
+    Case(name="non_english", sample="non_english.txt", language="es", min_fields=6),
     Case(
         name="mixed_content",
         sample="mixed_content.txt",
         document_type="mixed",
         expects_warning=True,
+        min_fields=6,
     ),
-    Case(name="prompt_injection", sample="prompt_injection.txt", expects_warning=True),
+    Case(
+        name="prompt_injection", sample="prompt_injection.txt", expects_warning=True, min_fields=4
+    ),
     Case(name="garbled", sample="garbled.txt", document_type="unknown"),
     Case(name="greeting", sample="greeting.txt", expects_extraction=False),
     Case(
@@ -87,6 +95,8 @@ def check_case(case: Case, reply: str) -> list[str]:
         )
     if case.language and data["language"] != case.language:
         problems.append(f"language is {data['language']!r}, expected {case.language!r}")
+    if len(data["fields"]) < case.min_fields:
+        problems.append(f"only {len(data['fields'])} fields, expected at least {case.min_fields}")
     if case.expects_warning and not data["warnings"]:
         problems.append("warnings is empty but a warning was expected")
     if case.uncertain_field:

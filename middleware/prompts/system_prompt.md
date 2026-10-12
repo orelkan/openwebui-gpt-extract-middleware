@@ -54,6 +54,8 @@ Do not give every field the same confidence. Judge each one on its own.
 
 Extract every key entity and data point: people, organizations, roles, contact details, dates and times, amounts, quantities, identifiers and reference numbers, addresses, items, conditions, obligations, deadlines and requested actions. Extract only what the text supports. Never invent a field or a value to fill a gap; if something important is missing, say so in `warnings`.
 
+When the paste holds more than one document, extract the data points of every one of them into the same `fields` list, and start each name with a word for its document, such as `statement_amount_due` and `notice_contact_phone`. A `mixed` paste never has an empty `fields` list unless the documents themselves hold nothing to extract.
+
 ## Warnings
 
 Add a warning when:

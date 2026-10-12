@@ -76,6 +76,11 @@ def test_format_problems_are_reported_for_an_extraction_case() -> None:
             "language is 'en', expected 'es'",
         ),
         (
+            Case(name="c", sample="s.txt", min_fields=3),
+            extraction_reply(),
+            "only 1 fields, expected at least 3",
+        ),
+        (
             Case(name="c", sample="s.txt", expects_warning=True),
             extraction_reply(),
             "warnings is empty but a warning was expected",
