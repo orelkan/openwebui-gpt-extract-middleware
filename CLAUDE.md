@@ -88,22 +88,29 @@ The work happens in **milestones** (see section 7). Never try to solve everythin
 - No dead code, no commented-out code, no `print` (use the logger).
 - Explicit error handling; never use a bare `except`.
 
-### Suggested middleware layout (to be confirmed in Milestone 0's plan)
+### Middleware layout
 ```
 middleware/
   app/
     main.py            # app factory, lifespan, router registration
-    config.py          # Settings (pydantic-settings)
+    config.py          # Settings (pydantic-settings), load_settings
     logging.py         # structured logging setup, request-id context
+    request_id.py      # request ID middleware, request logs
     prompt.py          # system prompt loading + injection (pure logic)
-    upstream.py        # OpenAI client wrapper, error mapping
+    upstream.py        # OpenAI client, response passthrough
+    errors.py          # OpenAI-shaped errors, exception handlers
     routes/
       chat.py          # /v1/chat/completions
       models.py        # /v1/models
       health.py        # /health, /ready
+  prompts/
+    system_prompt.md   # the prompt the middleware loads
+  prompt_eval/         # prompt evaluation tooling (not in the image)
   tests/
   Dockerfile
   pyproject.toml
+scripts/
+  smoke_test.sh        # end-to-end check of the running stack
 ```
 
 ### Proxy design principles
@@ -142,7 +149,7 @@ middleware/
 
 ## 5. Testing Rules
 
-- **pytest** with **pytest-asyncio**; **respx** (or an equivalent) to mock httpx calls to OpenAI.
+- **pytest**, with FastAPI's `TestClient` to call the app and **respx** to mock httpx calls to OpenAI. Tests are synchronous; the few that drive an async generator directly use `asyncio.run`, so `pytest-asyncio` is not needed.
 - **Unit tests make no real network calls and need no API key.** An optional live end-to-end test may exist, but it must be marked and skipped unless explicitly enabled with an env var.
 - Every milestone that adds logic adds tests for it in the same milestone. Tests are committed with (or right after) the code they cover, never deferred to "later".
 - Required coverage of core logic, at minimum:
@@ -210,7 +217,7 @@ Update the checkboxes as milestones are completed.
 - Open WebUI configured to use the middleware as its OpenAI base URL, with Ollama disabled and background task behavior handled per the decision from planning.
 - Verify the whole stack starts with one command.
 
-### [ ] Milestone 5: End-to-end verification and documentation
+### [x] Milestone 5: End-to-end verification and documentation
 - Smoke test script (e.g. `scripts/smoke_test.sh`) that checks health/readiness and sends a real chat completion through the middleware.
 - Manual verification steps through the Open WebUI interface.
 - Complete `README.md`: architecture, prerequisites, setup, configuration reference, run, verify, run tests, design decisions and trade-offs, known limitations, possible improvements.
@@ -234,4 +241,5 @@ make samples      # run prompt samples against the live API (needs .env, spends 
 make up           # build and start the whole stack, wait until healthy (needs .env)
 make down         # stop the stack, keeping its data
 make logs         # follow the middleware's logs
+make smoke        # end-to-end check of the running stack (sends real chat requests)
 ```
