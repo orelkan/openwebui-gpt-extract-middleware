@@ -8,7 +8,7 @@ User → Open WebUI (v0.6.5) → Middleware (FastAPI) → OpenAI GPT
               └── Database (PostgreSQL, Open WebUI persistence)
 ```
 
-> **Status:** work in progress. So far the repository contains the middleware scaffolding (app factory, configuration, `GET /health`). The proxy, the prompt, and the Docker stack are not implemented yet.
+> **Status:** work in progress. The middleware proxies chat completions (streaming and non-streaming) and the model list, with the system prompt injected. The shipped prompt is still a placeholder, and structured logging, upstream failure mapping, the readiness endpoint and the Docker stack are not implemented yet.
 
 ## Prerequisites
 
@@ -42,15 +42,30 @@ The middleware reads its configuration from environment variables. See [.env.exa
 |---|---|---|---|
 | `OPENAI_API_KEY` | yes | | API key used for upstream calls to OpenAI |
 | `OPENAI_BASE_URL` | no | `https://api.openai.com/v1` | Upstream OpenAI-compatible API base URL |
+| `SYSTEM_PROMPT_PATH` | no | `middleware/prompts/system_prompt.md` | File holding the system prompt to inject |
+| `UPSTREAM_CONNECT_TIMEOUT_SECONDS` | no | `10` | Time allowed to connect to upstream |
+| `UPSTREAM_READ_TIMEOUT_SECONDS` | no | `120` | Longest allowed wait between two chunks of an upstream response |
+
+## Endpoints
+
+| Endpoint | Description |
+|---|---|
+| `GET /health` | Liveness. Makes no external calls. |
+| `GET /v1/models` | Upstream model list, passed through unchanged. |
+| `POST /v1/chat/completions` | Chat completion with the system prompt prepended. With `"stream": true` the upstream SSE stream is relayed as it arrives. |
 
 ## Running the middleware locally
 
 ```bash
 OPENAI_API_KEY=sk-... make run
 curl localhost:8000/health    # {"status":"ok"}
+curl localhost:8000/v1/models
+curl -N localhost:8000/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model": "gpt-4o-mini", "stream": true, "messages": [{"role": "user", "content": "Invoice 42 from ACME, total $310, due May 1"}]}'
 ```
 
-The middleware refuses to start when `OPENAI_API_KEY` is missing.
+The middleware refuses to start when `OPENAI_API_KEY` is missing or when the system prompt file is missing or empty.
 
 ## Running the full stack
 
@@ -62,4 +77,11 @@ To be written once the Docker stack exists.
 
 ## Design decisions
 
-To be written as the middleware takes shape.
+This section grows with the project.
+
+- **The system prompt always goes first, and nothing the client sent is removed.** If Open WebUI sends its own system message, it stays in place after ours.
+- **Every chat completion request gets the prompt, with no special cases.** Open WebUI's background tasks (titles, tags) use the same endpoint, so they will be switched off in the Open WebUI configuration instead of being detected in the middleware.
+- **Transparent pass-through.** Request fields the middleware does not know are forwarded unchanged, and upstream answers, errors included, are returned with their original status code and body.
+- **The middleware uses its own API key.** Any `Authorization` header sent by the caller is ignored and never forwarded. The middleware itself has no authentication, so it must only be reachable by Open WebUI.
+- **One shared HTTP client**, created at startup and closed at shutdown, so upstream connections are reused across requests.
+- **The prompt is read once at startup** from a file that contains nothing but the prompt.

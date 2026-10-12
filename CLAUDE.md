@@ -184,7 +184,7 @@ Update the checkboxes as milestones are completed.
 - First test (health endpoint) and a `Makefile` (or equivalent) with `install`, `lint`, `format`, `typecheck`, `test`, `up`, `down` targets.
 - Optional: pre-commit hooks for ruff.
 
-### [ ] Milestone 1: Proxy core
+### [x] Milestone 1: Proxy core
 - Shared httpx client in the app lifespan.
 - System prompt loading (from a file path in settings) and the pure injection function.
 - `POST /v1/chat/completions` for non-streaming and streaming (SSE passthrough).
