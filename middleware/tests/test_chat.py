@@ -234,3 +234,43 @@ def test_chat_completion_maps_upstream_failure_to_gateway_error(
     assert logged_error["error_type"] == type(upstream_failure).__name__
     assert logged_error["status_code"] == expected_status
     assert logged_error["mid_stream"] is False
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("upstream_status", [401, 429, 500])
+def test_chat_completion_returns_upstream_json_error_as_json_even_if_labelled_text(
+    client: TestClient, upstream: respx.MockRouter, stream: bool, upstream_status: int
+) -> None:
+    error = {"error": {"message": "Upstream said no", "type": "some_error"}}
+    upstream.post("/chat/completions").mock(
+        return_value=httpx.Response(
+            upstream_status, headers={"content-type": "text/plain"}, content=json.dumps(error)
+        )
+    )
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={"model": "gpt-4o-mini", "messages": [], "stream": stream},
+    )
+
+    assert response.status_code == upstream_status
+    assert response.headers["content-type"] == "application/json"
+    assert response.json() == error
+
+
+def test_chat_completion_wraps_non_json_upstream_error_in_openai_format(
+    client: TestClient, upstream: respx.MockRouter
+) -> None:
+    upstream.post("/chat/completions").mock(
+        return_value=httpx.Response(502, html="<html><body>Bad Gateway</body></html>")
+    )
+
+    response = client.post("/v1/chat/completions", json={"model": "gpt-4o-mini", "messages": []})
+
+    assert response.status_code == 502
+    assert response.json()["error"] == {
+        "message": "The upstream API returned HTTP 502",
+        "type": "upstream_error",
+        "param": None,
+        "code": None,
+    }
