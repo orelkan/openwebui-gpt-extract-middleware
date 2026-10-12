@@ -11,6 +11,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
+from app.errors import openai_error_body
 from app.logging import elapsed_ms, log_event
 from app.prompt import inject_system_prompt
 from app.upstream import passthrough_response
@@ -57,14 +58,9 @@ def stream_error_event() -> bytes:
     Open WebUI shows a `data:` line holding an `error` object as an error
     message next to the partial answer.
     """
-    error = {
-        "error": {
-            "message": "The upstream connection was lost before the answer was complete",
-            "type": "upstream_error",
-            "param": None,
-            "code": None,
-        }
-    }
+    error = openai_error_body(
+        "The upstream connection was lost before the answer was complete", "upstream_error"
+    )
     return f"\n\ndata: {json.dumps(error)}\n\ndata: [DONE]\n\n".encode()
 
 

@@ -1,6 +1,7 @@
 """Error responses in OpenAI's JSON error format."""
 
 import logging
+from typing import Any
 
 import httpx
 from fastapi import FastAPI, Request
@@ -10,17 +11,21 @@ from fastapi.responses import JSONResponse
 from app.logging import log_event
 
 
-def openai_error_response(
-    status_code: int, message: str, error_type: str, code: str | None = None
-) -> JSONResponse:
-    """Build an error response shaped like the ones OpenAI returns.
+def openai_error_body(message: str, error_type: str, code: str | None = None) -> dict[str, Any]:
+    """Build an error body shaped like the ones OpenAI returns.
 
     Clients of an OpenAI-compatible API, Open WebUI included, read the
     message from `error.message`.
     """
+    return {"error": {"message": message, "type": error_type, "param": None, "code": code}}
+
+
+def openai_error_response(
+    status_code: int, message: str, error_type: str, code: str | None = None
+) -> JSONResponse:
+    """Build an error response in OpenAI's error format."""
     return JSONResponse(
-        status_code=status_code,
-        content={"error": {"message": message, "type": error_type, "param": None, "code": code}},
+        status_code=status_code, content=openai_error_body(message, error_type, code)
     )
 
 
