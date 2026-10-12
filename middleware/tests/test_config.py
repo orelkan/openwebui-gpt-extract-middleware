@@ -1,7 +1,11 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
-from app.config import load_settings
+from app.config import Settings, load_settings
+
+ENV_EXAMPLE = Path(__file__).resolve().parents[2] / ".env.example"
 
 
 def test_settings_reads_values_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -52,3 +56,10 @@ def test_settings_rejects_negative_connect_retries(monkeypatch: pytest.MonkeyPat
 
     with pytest.raises(ValidationError):
         load_settings()
+
+
+def test_every_setting_is_documented_in_env_example() -> None:
+    documented = ENV_EXAMPLE.read_text(encoding="utf-8")
+
+    for field_name in Settings.model_fields:
+        assert f"{field_name.upper()}=" in documented
