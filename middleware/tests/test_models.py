@@ -1,4 +1,5 @@
 import httpx
+import pytest
 import respx
 from fastapi.testclient import TestClient
 
@@ -36,3 +37,25 @@ def test_list_models_passes_through_upstream_error(
 
     assert response.status_code == 401
     assert response.json() == error
+
+
+@pytest.mark.parametrize(
+    ("upstream_failure", "expected_status", "expected_type"),
+    [
+        (httpx.ReadTimeout("read timed out"), 504, "upstream_timeout"),
+        (httpx.ConnectError("connection refused"), 502, "upstream_unreachable"),
+    ],
+)
+def test_list_models_maps_upstream_failure_to_gateway_error(
+    client: TestClient,
+    upstream: respx.MockRouter,
+    upstream_failure: httpx.TransportError,
+    expected_status: int,
+    expected_type: str,
+) -> None:
+    upstream.get("/models").mock(side_effect=upstream_failure)
+
+    response = client.get("/v1/models")
+
+    assert response.status_code == expected_status
+    assert response.json()["error"]["type"] == expected_type

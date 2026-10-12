@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
+import pytest
 import respx
 from fastapi.testclient import TestClient
 
@@ -198,3 +199,38 @@ def test_stream_upstream_body_closes_upstream_when_consumer_stops_early() -> Non
 
     assert first_chunk == SSE_CHUNKS[0]
     assert upstream_response.is_closed
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize(
+    ("upstream_failure", "expected_status", "expected_type"),
+    [
+        (httpx.ConnectTimeout("connect timed out"), 504, "upstream_timeout"),
+        (httpx.ReadTimeout("read timed out"), 504, "upstream_timeout"),
+        (httpx.ConnectError("connection refused"), 502, "upstream_unreachable"),
+        (httpx.RemoteProtocolError("server disconnected"), 502, "upstream_unreachable"),
+    ],
+)
+def test_chat_completion_maps_upstream_failure_to_gateway_error(
+    client: TestClient,
+    upstream: respx.MockRouter,
+    log_entries: list[dict[str, Any]],
+    stream: bool,
+    upstream_failure: httpx.TransportError,
+    expected_status: int,
+    expected_type: str,
+) -> None:
+    upstream.post("/chat/completions").mock(side_effect=upstream_failure)
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={"model": "gpt-4o-mini", "messages": [], "stream": stream},
+    )
+
+    assert response.status_code == expected_status
+    assert response.headers["content-type"] == "application/json"
+    assert response.json()["error"]["type"] == expected_type
+    logged_error = next(entry for entry in log_entries if entry["event"] == "upstream_error")
+    assert logged_error["error_type"] == type(upstream_failure).__name__
+    assert logged_error["status_code"] == expected_status
+    assert logged_error["mid_stream"] is False
