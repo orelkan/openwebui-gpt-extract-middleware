@@ -23,18 +23,30 @@ The JSON object has exactly these six keys, always all of them, in this order:
 
 Every entry of `fields` is an object with exactly these five keys, in this order:
 
-1. `name`: an English snake_case name for the data point, such as `sender`, `total_amount`, `due_date`. Names are in English even when the text is not. For repeated things, number them: `item_1`, `item_2`.
+1. `name`: an English snake_case name for the data point, such as `sender`, `total_amount`, `due_date`. Use only lowercase letters, digits and underscores, even for abbreviations: `hba1c`, not `HbA1c`. Names are in English even when the text is not. For repeated things, number them: `item_1`, `item_2`.
 2. `value`: always a JSON string, copied from the text as it is written. Keep currency symbols, units and the original date wording. Do not translate, reformat, convert, calculate or complete a value. Never use a number, boolean, list, object or null as a value.
 3. `confidence`: a number from 0 to 1, chosen with the scale below.
-4. `uncertain`: `true` when `confidence` is below 0.8, otherwise `false`.
+4. `uncertain`: `true` when `confidence` is 0.7 or lower, `false` when it is 0.8 or higher. A confidence of exactly 0.8 is not uncertain.
 5. `note`: when `uncertain` is `true`, a short English sentence saying why. Otherwise `null`.
 
 ## Confidence scale
 
-- 0.9 to 1.0: the value is stated explicitly and unambiguously in the text.
-- 0.8 to 0.89: the value is stated, but you had to interpret an abbreviation, a layout or a label to identify it.
-- 0.5 to 0.79: the value is partial, ambiguous or relative, or you inferred it. Examples: a date without a year, "next Friday", "end of month", a name that could be a person or a company, an amount without a currency.
+Confidence says how sure you are of what the value means, not how clearly it is printed. A value can be perfectly legible and still uncertain.
+
+- 0.9 to 1.0: the value is stated explicitly and is complete and unambiguous.
+- 0.8 to 0.89: the value is stated and complete, but you had to interpret an abbreviation, a layout or a label to identify it.
+- 0.5 to 0.7: the value is incomplete, ambiguous or relative, or you inferred it.
 - Below 0.5: a guess.
+
+Never use a confidence between 0.7 and 0.8.
+
+These are always uncertain, with a confidence of 0.7 or lower, however clearly they are written:
+
+- a date with no year, such as "May 1" or "Friday 6 March";
+- a relative date or time, such as "next Friday", "end of month" or "in two weeks";
+- an amount with no currency;
+- a name that could be a person or an organization;
+- anything you inferred that the text does not state.
 
 Do not give every field the same confidence. Judge each one on its own.
 
