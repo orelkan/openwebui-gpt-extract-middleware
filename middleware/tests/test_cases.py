@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from prompt_eval.cases import CASES, SAMPLES_DIR, Case, check_case
+from prompt_eval.cases import CASES, SAMPLES_DIR, Case, check_case, count_field_variants
 
 
 def extraction_reply(**changes: Any) -> str:
@@ -81,6 +81,11 @@ def test_format_problems_are_reported_for_an_extraction_case() -> None:
             "only 1 fields, expected at least 3",
         ),
         (
+            Case(name="c", sample="s.txt", required_fields=("due", "iban")),
+            extraction_reply(),
+            "no field with 'iban' in its name",
+        ),
+        (
             Case(name="c", sample="s.txt", expects_warning=True),
             extraction_reply(),
             "warnings is empty but a warning was expected",
@@ -119,3 +124,41 @@ def test_missing_mention_is_reported_for_a_prose_case() -> None:
     case = Case(name="c", sample="s.txt", expects_extraction=False, answer_mentions="May 1")
 
     assert check_case(case, "It is due soon.") == ["reply does not mention 'May 1'"]
+
+
+def field(name: str, value: str) -> dict[str, Any]:
+    return {"name": name, "value": value, "uncertain": False, "confidence": 0.95, "note": None}
+
+
+def test_identical_repeats_count_as_one_variant() -> None:
+    reply = extraction_reply(fields=[field("total", "$5"), field("date", "May 1, 2026")])
+
+    assert count_field_variants([reply, reply, reply]) == (1, 1)
+
+
+def test_field_order_does_not_create_a_variant() -> None:
+    first = extraction_reply(fields=[field("total", "$5"), field("date", "May 1, 2026")])
+    second = extraction_reply(fields=[field("date", "May 1, 2026"), field("total", "$5")])
+
+    assert count_field_variants([first, second]) == (1, 1)
+
+
+def test_same_names_with_different_values_are_value_variants_only() -> None:
+    first = extraction_reply(fields=[field("total", "$5")])
+    second = extraction_reply(fields=[field("total", "5 USD")])
+
+    assert count_field_variants([first, second]) == (1, 2)
+
+
+def test_different_names_are_name_variants() -> None:
+    first = extraction_reply(fields=[field("total", "$5")])
+    second = extraction_reply(fields=[field("total_amount", "$5")])
+    third = extraction_reply(fields=[field("amount", "$5")])
+
+    assert count_field_variants([first, second, third]) == (3, 3)
+
+
+def test_replies_that_break_the_format_are_left_out_of_the_count() -> None:
+    reply = extraction_reply(fields=[field("total", "$5")])
+
+    assert count_field_variants([reply, "Sorry, I cannot help.", "```json\n{}\n```"]) == (1, 1)

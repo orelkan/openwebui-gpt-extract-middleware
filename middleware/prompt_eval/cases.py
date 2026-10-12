@@ -26,6 +26,8 @@ class Case:
     expects_warning: bool = False
     # Fewest entries `fields` may have; catches a well-formed but empty extraction.
     min_fields: int = 0
+    # Each of these must be part of the name of at least one field.
+    required_fields: tuple[str, ...] = ()
     # Text the prose answer must contain.
     answer_mentions: str | None = None
 
@@ -97,6 +99,10 @@ def check_case(case: Case, reply: str) -> list[str]:
         problems.append(f"language is {data['language']!r}, expected {case.language!r}")
     if len(data["fields"]) < case.min_fields:
         problems.append(f"only {len(data['fields'])} fields, expected at least {case.min_fields}")
+    names = [field["name"] for field in data["fields"]]
+    for required in case.required_fields:
+        if not any(required in name for name in names):
+            problems.append(f"no field with {required!r} in its name")
     if case.expects_warning and not data["warnings"]:
         problems.append("warnings is empty but a warning was expected")
     if case.uncertain_field:
@@ -106,3 +112,23 @@ def check_case(case: Case, reply: str) -> list[str]:
         elif not all(field["uncertain"] for field in matching):
             problems.append(f"field with {case.uncertain_field!r} in its name is not uncertain")
     return problems
+
+
+def count_field_variants(replies: list[str]) -> tuple[int, int]:
+    """Measure how much repeated extractions of the same text differ.
+
+    Returns the number of distinct sets of field names among the replies, and
+    the number of distinct sets of (name, value) pairs. (1, 1) means every
+    repeat extracted exactly the same data. Replies that break the format are
+    left out; they are already reported as failures.
+    """
+    name_sets = set()
+    pair_sets = set()
+    for reply in replies:
+        block = extract_json_block(reply)
+        if block is None or check_extraction_reply(reply):
+            continue
+        fields = json.loads(block)["fields"]
+        name_sets.add(frozenset(field["name"] for field in fields))
+        pair_sets.add(frozenset((field["name"], field["value"]) for field in fields))
+    return len(name_sets), len(pair_sets)
