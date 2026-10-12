@@ -1,4 +1,4 @@
-.PHONY: install format lint typecheck test check run samples up down logs
+.PHONY: install format lint typecheck test check run samples up down logs smoke
 
 install:
 	cd middleware && uv sync
@@ -40,3 +40,8 @@ down:
 
 logs:
 	docker compose logs -f middleware
+
+# End-to-end check of the running stack (start it with `make up` first).
+# Sends three real chat requests.
+smoke:
+	./scripts/smoke_test.sh
