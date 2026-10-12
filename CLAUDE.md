@@ -226,7 +226,7 @@ Run from the repository root. Keep this section accurate as commands change.
 make install      # uv sync in middleware/
 make format       # ruff format + ruff check --fix
 make lint         # ruff format --check + ruff check
-make typecheck    # mypy (strict) on app and tests
+make typecheck    # mypy (strict) on app, prompt_eval and tests
 make test         # pytest with coverage report
 make check        # lint + typecheck + test
 make run          # run the middleware locally with reload (needs OPENAI_API_KEY)

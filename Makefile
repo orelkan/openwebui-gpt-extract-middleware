@@ -11,7 +11,7 @@ lint:
 	cd middleware && uv run ruff format --check . && uv run ruff check .
 
 typecheck:
-	cd middleware && uv run mypy app tests
+	cd middleware && uv run mypy app prompt_eval tests
 
 test:
 	cd middleware && uv run pytest --cov=app --cov-report=term-missing
