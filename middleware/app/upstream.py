@@ -1,6 +1,7 @@
 """HTTP client for the upstream OpenAI API."""
 
 import httpx
+from fastapi import Response
 
 from app.config import Settings
 
@@ -18,4 +19,17 @@ def create_upstream_client(settings: Settings) -> httpx.AsyncClient:
             settings.upstream_read_timeout_seconds,
             connect=settings.upstream_connect_timeout_seconds,
         ),
+    )
+
+
+def passthrough_response(upstream_response: httpx.Response) -> Response:
+    """Turn a fully read upstream response into our response, unchanged.
+
+    Status code and body are kept as they are, so upstream errors reach the
+    caller in OpenAI's own error format.
+    """
+    return Response(
+        content=upstream_response.content,
+        status_code=upstream_response.status_code,
+        media_type=upstream_response.headers.get("content-type"),
     )

@@ -7,7 +7,7 @@ from fastapi import FastAPI
 
 from app.config import Settings
 from app.prompt import load_system_prompt
-from app.routes import health
+from app.routes import health, models
 from app.upstream import create_upstream_client
 
 
@@ -30,4 +30,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="GPT Extract Middleware", lifespan=lifespan)
     app.state.settings = settings or Settings()
     app.include_router(health.router)
+    app.include_router(models.router)
     return app

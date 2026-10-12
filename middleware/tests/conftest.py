@@ -2,6 +2,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+import respx
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
@@ -29,3 +30,10 @@ def settings(tmp_path: Path, system_prompt: str) -> Settings:
 def client(settings: Settings) -> Iterator[TestClient]:
     with TestClient(create_app(settings)) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def upstream(settings: Settings) -> Iterator[respx.MockRouter]:
+    """Mocked OpenAI API. Routes are declared relative to the upstream base URL."""
+    with respx.mock(base_url=settings.openai_base_url) as router:
+        yield router
