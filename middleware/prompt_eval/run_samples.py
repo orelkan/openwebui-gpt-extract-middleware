@@ -13,7 +13,7 @@ import httpx
 
 from app.config import Settings
 from app.prompt import inject_system_prompt, load_system_prompt
-from prompt_eval.cases import CASES, SAMPLES_DIR, Case, check_case, count_field_variants
+from prompt_eval.cases import CASES, SAMPLES_DIR, Case, check_case, count_shared_field_names
 
 logger = logging.getLogger("prompt_eval")
 
@@ -92,8 +92,8 @@ def main() -> int:
     cases = [case for case in CASES if arguments.case in (None, case.name)]
     passed_runs = 0
     total_tokens = 0
-    extraction_cases = 0
-    stable_cases = 0
+    shared_names = 0
+    total_names = 0
 
     with httpx.Client(
         base_url=settings.openai_base_url,
@@ -119,10 +119,10 @@ def main() -> int:
             passed = arguments.runs - len(failures)
             consistency = ""
             if case.expects_extraction:
-                name_variants, value_variants = count_field_variants(replies)
-                extraction_cases += 1
-                stable_cases += name_variants == 1
-                consistency = f"  field names: {name_variants} variant(s), values: {value_variants}"
+                shared, total = count_shared_field_names(replies)
+                shared_names += shared
+                total_names += total
+                consistency = f"  {shared}/{total} field names in every repeat"
             logger.info(
                 "%s %d/%d  %-18s%s", verdict, passed, arguments.runs, case.name, consistency
             )
@@ -133,9 +133,7 @@ def main() -> int:
     total_runs = len(cases) * arguments.runs
     logger.info("\n%d/%d runs passed", passed_runs, total_runs)
     logger.info(
-        "%d/%d extraction cases used the same field names in every repeat",
-        stable_cases,
-        extraction_cases,
+        "%d/%d field names appeared in every repeat of their case", shared_names, total_names
     )
     logger.info("settings %s, %d tokens used", model_settings, total_tokens)
     return 0 if passed_runs == total_runs else 1

@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from prompt_eval.cases import CASES, SAMPLES_DIR, Case, check_case, count_field_variants
+from prompt_eval.cases import CASES, SAMPLES_DIR, Case, check_case, count_shared_field_names
 
 
 def extraction_reply(**changes: Any) -> str:
@@ -130,35 +130,35 @@ def field(name: str, value: str) -> dict[str, Any]:
     return {"name": name, "value": value, "uncertain": False, "confidence": 0.95, "note": None}
 
 
-def test_identical_repeats_count_as_one_variant() -> None:
+def test_identical_repeats_share_every_field_name() -> None:
     reply = extraction_reply(fields=[field("total", "$5"), field("date", "May 1, 2026")])
 
-    assert count_field_variants([reply, reply, reply]) == (1, 1)
+    assert count_shared_field_names([reply, reply, reply]) == (2, 2)
 
 
-def test_field_order_does_not_create_a_variant() -> None:
+def test_field_order_and_values_do_not_affect_shared_names() -> None:
     first = extraction_reply(fields=[field("total", "$5"), field("date", "May 1, 2026")])
-    second = extraction_reply(fields=[field("date", "May 1, 2026"), field("total", "$5")])
+    second = extraction_reply(fields=[field("date", "1 May 2026"), field("total", "5 USD")])
 
-    assert count_field_variants([first, second]) == (1, 1)
-
-
-def test_same_names_with_different_values_are_value_variants_only() -> None:
-    first = extraction_reply(fields=[field("total", "$5")])
-    second = extraction_reply(fields=[field("total", "5 USD")])
-
-    assert count_field_variants([first, second]) == (1, 2)
+    assert count_shared_field_names([first, second]) == (2, 2)
 
 
-def test_different_names_are_name_variants() -> None:
-    first = extraction_reply(fields=[field("total", "$5")])
-    second = extraction_reply(fields=[field("total_amount", "$5")])
-    third = extraction_reply(fields=[field("amount", "$5")])
+def test_only_names_present_in_every_repeat_are_shared() -> None:
+    first = extraction_reply(fields=[field("total", "$5"), field("date", "May 1")])
+    second = extraction_reply(fields=[field("total", "$5"), field("due_date", "May 1")])
+    third = extraction_reply(fields=[field("total", "$5")])
 
-    assert count_field_variants([first, second, third]) == (3, 3)
+    assert count_shared_field_names([first, second, third]) == (1, 3)
 
 
 def test_replies_that_break_the_format_are_left_out_of_the_count() -> None:
     reply = extraction_reply(fields=[field("total", "$5")])
 
-    assert count_field_variants([reply, "Sorry, I cannot help.", "```json\n{}\n```"]) == (1, 1)
+    assert count_shared_field_names([reply, "Sorry, I cannot help.", "```json\n{}\n```"]) == (
+        1,
+        1,
+    )
+
+
+def test_no_valid_reply_gives_zero_names() -> None:
+    assert count_shared_field_names(["Sorry, I cannot help."]) == (0, 0)

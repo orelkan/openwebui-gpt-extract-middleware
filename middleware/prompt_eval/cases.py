@@ -114,21 +114,20 @@ def check_case(case: Case, reply: str) -> list[str]:
     return problems
 
 
-def count_field_variants(replies: list[str]) -> tuple[int, int]:
-    """Measure how much repeated extractions of the same text differ.
+def count_shared_field_names(replies: list[str]) -> tuple[int, int]:
+    """Measure how much repeated extractions of the same text agree on field names.
 
-    Returns the number of distinct sets of field names among the replies, and
-    the number of distinct sets of (name, value) pairs. (1, 1) means every
-    repeat extracted exactly the same data. Replies that break the format are
-    left out; they are already reported as failures.
+    Returns (shared, total): how many field names appear in every reply, and
+    how many distinct names appear in any of them. Equal numbers mean every
+    repeat used exactly the same names. Replies that break the format are left
+    out; they are already reported as failures.
     """
-    name_sets = set()
-    pair_sets = set()
+    name_sets = []
     for reply in replies:
         block = extract_json_block(reply)
         if block is None or check_extraction_reply(reply):
             continue
-        fields = json.loads(block)["fields"]
-        name_sets.add(frozenset(field["name"] for field in fields))
-        pair_sets.add(frozenset((field["name"], field["value"]) for field in fields))
-    return len(name_sets), len(pair_sets)
+        name_sets.append({field["name"] for field in json.loads(block)["fields"]})
+    if not name_sets:
+        return 0, 0
+    return len(set.intersection(*name_sets)), len(set.union(*name_sets))
