@@ -118,15 +118,28 @@ The middleware refuses to start when `OPENAI_API_KEY` is missing or when the sys
 
 ## Evaluating the prompt
 
-`make samples` sends twelve sample texts (email, receipt, job listing, medical report, legal paragraph and edge cases) to the live API with the system prompt injected, three times each, and checks every reply against the output format and per-sample expectations.
+`make samples` sends fourteen sample texts (email, receipt, job listing, medical report, legal paragraph, payment confirmation, personal record and edge cases) to the live API with the system prompt injected, three times each. It checks every reply against the output format and per-sample expectations, and reports how much the repeats agree with each other.
 
 ```bash
 cp .env.example .env          # then put your key in OPENAI_API_KEY
-make samples
+make samples ARGS="--reasoning-effort none --temperature 0"
 make samples ARGS="--case receipt --runs 1 --verbose"
 ```
 
-It prints a pass or fail line per sample and the tokens used. It calls OpenAI directly, so the middleware does not need to be running. It is not part of `make check`: it needs a key and costs a little on each run.
+| Flag | Default | Meaning |
+|---|---|---|
+| `--model` | `gpt-6-luna` | Model to test |
+| `--reasoning-effort` | not sent | Sent as `reasoning_effort` |
+| `--temperature` | not sent | Sent as `temperature` |
+| `--runs` | `3` | Repeats per sample |
+| `--case` | all | Run a single sample by name |
+| `--verbose` | off | Print every reply |
+
+It calls OpenAI directly, so the middleware does not need to be running. It is not part of `make check`: it needs a key and costs a little on each run.
+
+### Recommended model settings
+
+The middleware does not set model parameters; they are chosen per model in Open WebUI. The prompt was tuned and measured on `gpt-6-luna` with **reasoning effort `none`** and **temperature `0`**, which makes repeated extractions of the same text agree about twice as often as the model's defaults. The measurements are in [SYSTEM_PROMPT.md](SYSTEM_PROMPT.md).
 
 ## Running the full stack
 
