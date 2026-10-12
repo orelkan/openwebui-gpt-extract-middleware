@@ -8,7 +8,9 @@ User → Open WebUI (v0.6.5) → Middleware (FastAPI) → OpenAI GPT
               └── Database (PostgreSQL, Open WebUI persistence)
 ```
 
-> **Status:** work in progress. The middleware is functionally complete: it proxies chat completions (streaming and non-streaming) and the model list with the system prompt injected, writes structured logs, handles upstream failures and exposes health and readiness endpoints. The shipped prompt is still a placeholder, and the Docker stack is not implemented yet.
+> **Status:** work in progress. The middleware and the extraction prompt are complete. The Docker stack that adds Open WebUI and PostgreSQL is not implemented yet.
+
+The prompt, its design and how it was tested are described in [SYSTEM_PROMPT.md](SYSTEM_PROMPT.md).
 
 ## Prerequisites
 
@@ -31,6 +33,7 @@ make check       # lint, type check and tests, all at once
 | `make test` | Run the unit tests with a coverage report |
 | `make check` | `lint`, `typecheck` and `test` |
 | `make run` | Run the middleware locally with auto-reload on port 8000 |
+| `make samples` | Run the prompt's sample inputs against the live API (needs `.env`, spends credits) |
 
 The unit tests make no network calls and need no API key.
 
@@ -113,6 +116,18 @@ curl -N localhost:8000/v1/chat/completions \
 
 The middleware refuses to start when `OPENAI_API_KEY` is missing or when the system prompt file is missing or empty.
 
+## Evaluating the prompt
+
+`make samples` sends twelve sample texts (email, receipt, job listing, medical report, legal paragraph and edge cases) to the live API with the system prompt injected, three times each, and checks every reply against the output format and per-sample expectations.
+
+```bash
+cp .env.example .env          # then put your key in OPENAI_API_KEY
+make samples
+make samples ARGS="--case receipt --runs 1 --verbose"
+```
+
+It prints a pass or fail line per sample and the tokens used. It calls OpenAI directly, so the middleware does not need to be running. It is not part of `make check`: it needs a key and costs a little on each run.
+
 ## Running the full stack
 
 To be written once the Docker stack exists.
@@ -131,6 +146,8 @@ This section grows with the project.
 - **The middleware uses its own API key.** Any `Authorization` header sent by the caller is ignored and never forwarded. The middleware itself has no authentication, so it must only be reachable by Open WebUI.
 - **One shared HTTP client**, created at startup and closed at shutdown, so upstream connections are reused across requests.
 - **The prompt is read once at startup** from a file that contains nothing but the prompt.
+- **The prompt has one runtime copy and one documented copy, kept equal by a test.** The middleware loads `middleware/prompts/system_prompt.md`; `SYSTEM_PROMPT.md` embeds the same text and a unit test fails if they differ.
+- **The output format is enforced by the prompt alone.** The middleware does not validate or repair model replies; the format is checked by code only in the evaluation tooling under `middleware/prompt_eval`.
 - **Readiness checks OpenAI, liveness does not.** `/ready` makes a real (free) call to list models, so it catches a wrong API key or an unreachable upstream. `/health` only says the process is alive, which is what a container healthcheck should use: an OpenAI outage must not make the container look dead.
 - **Upstream errors are always labelled as JSON.** OpenAI returns some JSON errors as `text/plain`. Open WebUI 0.6.5 only reads `error.message` from a response declared as JSON and otherwise shows the raw body.
 - **A stream that breaks is ended with an error event, not silently.** The 200 status has already been sent, so the failure is reported inside the stream, in a form Open WebUI 0.6.5 displays as an error.

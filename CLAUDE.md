@@ -197,7 +197,7 @@ Update the checkboxes as milestones are completed.
 - `GET /ready` with agreed readiness semantics.
 - Unit tests for every failure path and for logging behavior.
 
-### [ ] Milestone 3: Prompt engineering
+### [x] Milestone 3: Prompt engineering
 - Design the extraction system prompt: output format, JSON schema, confidence scoring, text type detection, follow-up behavior.
 - A small set of sample inputs (email, receipt, job listing, medical report, legal paragraph, edge cases such as empty input, non-English text, mixed content, prompt-injection attempts inside the pasted text).
 - An optional script to run the samples against the live API to iterate on the prompt (not part of unit tests).
