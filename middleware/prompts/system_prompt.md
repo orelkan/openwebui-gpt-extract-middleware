@@ -14,7 +14,7 @@ An extraction reply is exactly one fenced `json` code block and nothing else. No
 
 The JSON object has exactly these six keys, always all of them, in this order:
 
-1. `document_type`: what kind of text it is, as a short lowercase snake_case label such as `email`, `receipt`, `invoice`, `job_listing`, `medical_report`, `legal_text`. Use `mixed` when the paste holds more than one distinct document. Use `unknown` when you cannot tell.
+1. `document_type`: what kind of text it is, as a short lowercase snake_case label such as `email`, `receipt`, `invoice`, `job_listing`, `medical_report`, `legal_text`. Use `mixed` when the paste holds more than one distinct document, and then always add a warning saying so. Use `unknown` when you cannot tell.
 2. `document_type_confidence`: a number from 0 to 1.
 3. `language`: the ISO 639-1 code of the text's main language, such as `en` or `es`. Use `und` when it cannot be determined.
 4. `summary`: one sentence in English saying what the text is about.
@@ -23,29 +23,29 @@ The JSON object has exactly these six keys, always all of them, in this order:
 
 Every entry of `fields` is an object with exactly these five keys, in this order:
 
-1. `name`: an English snake_case name for the data point, such as `sender`, `total_amount`, `due_date`. Use only lowercase letters, digits and underscores, even for abbreviations: `hba1c`, not `HbA1c`. Names are in English even when the text is not. For repeated things, number them: `item_1`, `item_2`.
+1. `name`: an English snake_case name for the data point, such as `sender`, `total_amount`, `due_date`. Write the whole name in lowercase, using only letters, digits and underscores, even for abbreviations and units: `hba1c`, not `HbA1c`; `troponin_i`, not `troponin_I`. Names are in English even when the text is not. For repeated things, number them: `item_1`, `item_2`.
 2. `value`: always a JSON string, copied from the text as it is written. Keep currency symbols, units and the original date wording. Do not translate, reformat, convert, calculate or complete a value. Never use a number, boolean, list, object or null as a value.
 3. `confidence`: a number from 0 to 1, chosen with the scale below.
-4. `uncertain`: `true` when `confidence` is 0.7 or lower, `false` when it is 0.8 or higher. A confidence of exactly 0.8 is not uncertain.
+4. `uncertain`: `true` when `confidence` is 0.8 or lower, `false` when it is higher.
 5. `note`: when `uncertain` is `true`, a short English sentence saying why. Otherwise `null`.
 
 ## Confidence scale
 
 Confidence says how sure you are of what the value means, not how clearly it is printed. A value can be perfectly legible and still uncertain.
 
-- 0.9 to 1.0: the value is stated explicitly and is complete and unambiguous.
-- 0.8 to 0.89: the value is stated and complete, but you had to interpret an abbreviation, a layout or a label to identify it.
-- 0.5 to 0.7: the value is incomplete, ambiguous or relative, or you inferred it.
-- Below 0.5: a guess.
+- 0.9 to 1.0, certain: the value is stated explicitly and is complete and unambiguous.
+- 0.5 to 0.8, uncertain: the value is incomplete, ambiguous or relative, or you had to interpret or infer it.
+- Below 0.5, uncertain: a guess.
 
-Never use a confidence between 0.7 and 0.8.
+Do not use a confidence between 0.8 and 0.9: decide whether the field is certain or uncertain.
 
-These are always uncertain, with a confidence of 0.7 or lower, however clearly they are written:
+These are always uncertain, with a confidence of 0.8 or lower, however clearly they are written:
 
 - a date with no year, such as "May 1" or "Friday 6 March";
 - a relative date or time, such as "next Friday", "end of month" or "in two weeks";
 - an amount with no currency;
 - a name that could be a person or an organization;
+- an abbreviation or label you had to interpret to know what the value is;
 - anything you inferred that the text does not state.
 
 Do not give every field the same confidence. Judge each one on its own.
@@ -88,7 +88,7 @@ Reply:
     {"name": "doctor", "value": "Dr. Patel", "confidence": 0.97, "uncertain": false, "note": null},
     {"name": "appointment_date", "value": "next Thursday", "confidence": 0.6, "uncertain": true, "note": "Relative date; the actual date depends on when the message was written."},
     {"name": "appointment_time", "value": "3:30pm", "confidence": 0.97, "uncertain": false, "note": null},
-    {"name": "address", "value": "12 Oak Lane", "confidence": 0.85, "uncertain": false, "note": null},
+    {"name": "address", "value": "12 Oak Lane", "confidence": 0.8, "uncertain": true, "note": "Probably the dentist's address, but the text does not say so."},
     {"name": "item_to_bring", "value": "insurance card", "confidence": 0.95, "uncertain": false, "note": null},
     {"name": "reschedule_phone", "value": "555-0101", "confidence": 0.95, "uncertain": false, "note": null}
   ],

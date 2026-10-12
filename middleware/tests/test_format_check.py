@@ -61,6 +61,18 @@ def test_reply_with_empty_fields_and_warnings_text_is_valid() -> None:
     assert check_extraction_reply(as_reply(data)) == []
 
 
+def test_confidence_of_exactly_the_threshold_counts_as_uncertain() -> None:
+    data = with_first_field(confidence=0.8, uncertain=True, note="Label was abbreviated")
+
+    assert check_extraction_reply(as_reply(data)) == []
+
+
+def test_confidence_just_above_the_threshold_counts_as_certain() -> None:
+    data = with_first_field(confidence=0.85, uncertain=False, note=None)
+
+    assert check_extraction_reply(as_reply(data)) == []
+
+
 @pytest.mark.parametrize(
     "reply",
     [

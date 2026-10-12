@@ -17,8 +17,8 @@ TOP_LEVEL_KEYS = [
     "warnings",
 ]
 FIELD_KEYS = ["name", "value", "confidence", "uncertain", "note"]
-# A field is flagged uncertain exactly when its confidence is below this.
-UNCERTAIN_BELOW = 0.8
+# A field is flagged uncertain exactly when its confidence is this or lower.
+UNCERTAIN_AT_OR_BELOW = 0.8
 
 SNAKE_CASE = re.compile(r"[a-z][a-z0-9_]*")
 
@@ -55,7 +55,7 @@ def check_field(field: Any, index: int) -> list[str]:
     if not is_confidence(field["confidence"]):
         problems.append(f"{where}.confidence is not a number from 0 to 1")
         return problems
-    should_be_uncertain = field["confidence"] < UNCERTAIN_BELOW
+    should_be_uncertain = field["confidence"] <= UNCERTAIN_AT_OR_BELOW
     if field["uncertain"] is not should_be_uncertain:
         problems.append(
             f"{where}.uncertain is {field['uncertain']!r} but confidence is {field['confidence']}"
