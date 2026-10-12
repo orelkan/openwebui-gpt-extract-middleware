@@ -10,6 +10,9 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from app.logging import elapsed_ms, log_event, request_id_var
 
 REQUEST_ID_HEADER = "X-Request-ID"
+# The container healthcheck calls this path every few seconds. Its requests
+# are logged at DEBUG so they do not bury the real ones.
+PROBE_PATH = "/health"
 
 
 class RequestIdMiddleware:
@@ -41,7 +44,8 @@ class RequestIdMiddleware:
                 MutableHeaders(scope=message)[REQUEST_ID_HEADER] = request_id
             await send(message)
 
-        log_event("request_received", method=scope["method"], path=scope["path"])
+        level = logging.DEBUG if scope["path"] == PROBE_PATH else logging.INFO
+        log_event("request_received", level=level, method=scope["method"], path=scope["path"])
         try:
             await self.app(scope, receive, send_with_request_id)
         except Exception:
@@ -52,6 +56,7 @@ class RequestIdMiddleware:
         finally:
             log_event(
                 "request_completed",
+                level=level,
                 status_code=status_code,
                 latency_ms=elapsed_ms(started_at),
             )
