@@ -1,15 +1,30 @@
+import asyncio
 import json
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
 import respx
 from fastapi.testclient import TestClient
 
+from app.routes.chat import stream_upstream_body
+
 COMPLETION = {
     "id": "chatcmpl-1",
     "object": "chat.completion",
     "choices": [{"index": 0, "message": {"role": "assistant", "content": "Hi"}}],
 }
+
+SSE_CHUNKS = [
+    b'data: {"choices":[{"delta":{"content":"Hel"}}]}\n\n',
+    b'data: {"choices":[{"delta":{"content":"lo"}}]}\n\n',
+    b"data: [DONE]\n\n",
+]
+
+
+async def sse_stream() -> AsyncIterator[bytes]:
+    for chunk in SSE_CHUNKS:
+        yield chunk
 
 
 def forwarded_body(route: respx.Route) -> Any:
@@ -108,3 +123,75 @@ def test_chat_completion_rejects_request_without_messages(client: TestClient) ->
     response = client.post("/v1/chat/completions", json={"model": "gpt-4o-mini"})
 
     assert response.status_code == 422
+
+
+def test_streaming_chat_completion_forwards_whole_stream(
+    client: TestClient, upstream: respx.MockRouter, system_prompt: str
+) -> None:
+    route = upstream.post("/chat/completions").mock(
+        return_value=httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, content=sse_stream()
+        )
+    )
+
+    with client.stream(
+        "POST",
+        "/v1/chat/completions",
+        json={
+            "model": "gpt-4o-mini",
+            "messages": [{"role": "user", "content": "Hello"}],
+            "stream": True,
+        },
+    ) as response:
+        body = response.read()
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    # TestClient hands the body over in one piece, so this checks content and
+    # order; chunk-by-chunk relaying is covered by the stream_upstream_body test.
+    assert body == b"".join(SSE_CHUNKS)
+    assert body.endswith(b"data: [DONE]\n\n")
+    assert forwarded_body(route)["stream"] is True
+    assert forwarded_body(route)["messages"][0] == {"role": "system", "content": system_prompt}
+
+
+def test_streaming_chat_completion_passes_through_upstream_error(
+    client: TestClient, upstream: respx.MockRouter
+) -> None:
+    error = {"error": {"message": "Rate limit reached", "type": "rate_limit_error"}}
+    upstream.post("/chat/completions").mock(return_value=httpx.Response(429, json=error))
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={"model": "gpt-4o-mini", "messages": [], "stream": True},
+    )
+
+    assert response.status_code == 429
+    assert response.headers["content-type"] == "application/json"
+    assert response.json() == error
+
+
+def test_stream_upstream_body_relays_each_chunk_separately() -> None:
+    upstream_response = httpx.Response(200, content=sse_stream())
+
+    async def collect_chunks() -> list[bytes]:
+        return [chunk async for chunk in stream_upstream_body(upstream_response)]
+
+    received_chunks = asyncio.run(collect_chunks())
+
+    assert received_chunks == SSE_CHUNKS
+
+
+def test_stream_upstream_body_closes_upstream_when_consumer_stops_early() -> None:
+    upstream_response = httpx.Response(200, content=sse_stream())
+
+    async def read_first_chunk_then_stop() -> bytes:
+        body = stream_upstream_body(upstream_response)
+        first_chunk = await anext(body)
+        await body.aclose()
+        return first_chunk
+
+    first_chunk = asyncio.run(read_first_chunk_then_stop())
+
+    assert first_chunk == SSE_CHUNKS[0]
+    assert upstream_response.is_closed
