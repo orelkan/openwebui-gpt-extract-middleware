@@ -1,4 +1,4 @@
-.PHONY: install format lint typecheck test check run
+.PHONY: install format lint typecheck test check run samples
 
 install:
 	cd middleware && uv sync
@@ -21,3 +21,9 @@ check: lint typecheck test
 # Needs OPENAI_API_KEY in the environment.
 run:
 	cd middleware && uv run uvicorn app.main:create_app --factory --reload
+
+# Runs the sample inputs against the live API to evaluate the system prompt.
+# Reads OPENAI_API_KEY from .env and spends credits. Extra flags go in ARGS,
+# e.g. make samples ARGS="--case receipt --verbose"
+samples:
+	cd middleware && uv run --env-file ../.env python -m prompt_eval.run_samples $(ARGS)

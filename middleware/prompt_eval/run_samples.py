@@ -1,0 +1,106 @@
+"""Run the sample cases against the live API and report which replies pass.
+
+Not a unit test: it needs OPENAI_API_KEY and spends credits. Run it with
+`make samples` from the repository root.
+"""
+
+import argparse
+import logging
+import sys
+from typing import Any
+
+import httpx
+
+from app.config import Settings
+from app.prompt import inject_system_prompt, load_system_prompt
+from prompt_eval.cases import CASES, SAMPLES_DIR, Case, check_case
+
+logger = logging.getLogger("prompt_eval")
+
+
+def ask_model(
+    client: httpx.Client, model: str, prompt: str, messages: list[dict[str, Any]]
+) -> tuple[str, int]:
+    """Send a conversation with the system prompt injected. Return the reply and tokens used."""
+    response = client.post(
+        "/chat/completions",
+        json={"model": model, "messages": inject_system_prompt(messages, prompt)},
+    )
+    response.raise_for_status()
+    body = response.json()
+    return body["choices"][0]["message"]["content"], body["usage"]["total_tokens"]
+
+
+def run_case(client: httpx.Client, model: str, prompt: str, case: Case) -> tuple[str, int]:
+    """Play one case's conversation. Return the reply to check and the tokens used."""
+    sample_text = (SAMPLES_DIR / case.sample).read_text(encoding="utf-8").strip()
+    messages: list[dict[str, Any]] = [{"role": "user", "content": sample_text}]
+    reply, tokens = ask_model(client, model, prompt, messages)
+    if case.follow_up is None:
+        return reply, tokens
+
+    messages.append({"role": "assistant", "content": reply})
+    messages.append({"role": "user", "content": case.follow_up})
+    follow_up_reply, follow_up_tokens = ask_model(client, model, prompt, messages)
+    return follow_up_reply, tokens + follow_up_tokens
+
+
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--model", default="gpt-4o-mini")
+    parser.add_argument("--runs", type=int, default=3, help="repeats per case")
+    parser.add_argument("--case", help="run only the case with this name")
+    parser.add_argument("--verbose", action="store_true", help="print every reply")
+    return parser.parse_args()
+
+
+def main() -> int:
+    """Run the selected cases and return the process exit code (0 when all passed)."""
+    arguments = parse_arguments()
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
+    # httpx logs every request at INFO, which would drown the report.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+    settings = Settings()
+    prompt = load_system_prompt(settings.system_prompt_path)
+    cases = [case for case in CASES if arguments.case in (None, case.name)]
+    passed_runs = 0
+    total_tokens = 0
+
+    with httpx.Client(
+        base_url=settings.openai_base_url,
+        headers={"Authorization": f"Bearer {settings.openai_api_key.get_secret_value()}"},
+        timeout=settings.upstream_read_timeout_seconds,
+    ) as client:
+        for case in cases:
+            failures = []
+            for run in range(1, arguments.runs + 1):
+                reply, tokens = run_case(client, arguments.model, prompt, case)
+                total_tokens += tokens
+                problems = check_case(case, reply)
+                if problems:
+                    failures.append((run, problems))
+                else:
+                    passed_runs += 1
+                if arguments.verbose:
+                    logger.info("--- %s, run %d\n%s", case.name, run, reply)
+            verdict = "PASS" if not failures else "FAIL"
+            passed = arguments.runs - len(failures)
+            logger.info("%s %d/%d  %s", verdict, passed, arguments.runs, case.name)
+            for run, problems in failures:
+                for problem in problems:
+                    logger.info("       run %d: %s", run, problem)
+
+    total_runs = len(cases) * arguments.runs
+    logger.info(
+        "\n%d/%d runs passed, model %s, %d tokens used",
+        passed_runs,
+        total_runs,
+        arguments.model,
+        total_tokens,
+    )
+    return 0 if passed_runs == total_runs else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
