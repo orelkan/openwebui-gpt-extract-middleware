@@ -1,0 +1,93 @@
+# Local stack: Open WebUI -> middleware -> OpenAI, with PostgreSQL for Open WebUI.
+# Configuration comes from .env (see .env.example). Start with `make up`.
+name: gpt-extract
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-openwebui}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-openwebui}
+      POSTGRES_DB: ${POSTGRES_DB:-openwebui}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # $$ leaves the variables for the container's shell, not for compose.
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  middleware:
+    build: ./middleware
+    restart: unless-stopped
+    environment:
+      # The only required variable: compose stops with this message without it.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in .env (see .env.example)}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      UPSTREAM_CONNECT_TIMEOUT_SECONDS: ${UPSTREAM_CONNECT_TIMEOUT_SECONDS:-10}
+      UPSTREAM_READ_TIMEOUT_SECONDS: ${UPSTREAM_READ_TIMEOUT_SECONDS:-120}
+      UPSTREAM_CONNECT_RETRIES: ${UPSTREAM_CONNECT_RETRIES:-2}
+      READINESS_TIMEOUT_SECONDS: ${READINESS_TIMEOUT_SECONDS:-5}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      # Localhost only: the middleware has no authentication of its own.
+      - "127.0.0.1:${MIDDLEWARE_PORT:-8000}:8000"
+    healthcheck:
+      # The check itself is defined in the Dockerfile. This only makes it run
+      # every second while starting, so `make up` does not wait a full interval.
+      start_period: 10s
+      start_interval: 1s
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:v0.6.5
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      middleware:
+        condition: service_healthy
+    environment:
+      # The middleware is the only model backend.
+      OPENAI_API_BASE_URL: http://middleware:8000/v1
+      # Open WebUI requires a key to be set; the middleware ignores it and
+      # authenticates to OpenAI with its own.
+      OPENAI_API_KEY: unused-by-middleware
+      ENABLE_OLLAMA_API: "false"
+
+      # Persistence in PostgreSQL instead of the built-in SQLite file.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-openwebui}:${POSTGRES_PASSWORD:-openwebui}@postgres:5432/${POSTGRES_DB:-openwebui}
+
+      # Open WebUI sends its background tasks through the same chat endpoint.
+      # The middleware injects the extraction prompt into every request, which
+      # would turn a chat title into an extraction, so the tasks are off.
+      ENABLE_TITLE_GENERATION: "false"
+      ENABLE_TAGS_GENERATION: "false"
+      ENABLE_SEARCH_QUERY_GENERATION: "false"
+      ENABLE_RETRIEVAL_QUERY_GENERATION: "false"
+      ENABLE_AUTOCOMPLETE_GENERATION: "false"
+
+      # Single local user, no login. Safe only because the port is on localhost.
+      WEBUI_AUTH: "false"
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:-local-dev-secret}
+      # Apply this file on every start instead of the copy Open WebUI keeps in
+      # its database after the first one.
+      ENABLE_PERSISTENT_CONFIG: "false"
+      # Hides the extra "Arena Model" entry from the model list.
+      ENABLE_EVALUATION_ARENA_MODELS: "false"
+      DEFAULT_MODELS: ${DEFAULT_MODEL:-gpt-6-luna}
+    ports:
+      - "127.0.0.1:${WEBUI_PORT:-3000}:8080"
+    volumes:
+      # Uploaded files and the embedding model Open WebUI downloads on first start.
+      - open_webui_data:/app/backend/data
+    healthcheck:
+      # The image defines the check; the first start can take a few minutes
+      # while it downloads its embedding model.
+      start_period: 300s
+      start_interval: 5s
+
+volumes:
+  postgres_data:
+  open_webui_data:
