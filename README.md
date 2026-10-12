@@ -133,6 +133,7 @@ make samples ARGS="--case receipt --runs 1 --verbose"
 | `--temperature` | not sent | Sent as `temperature` |
 | `--runs` | `3` | Repeats per sample |
 | `--case` | all | Run a single sample by name |
+| `--workers` | `8` | Requests sent at the same time |
 | `--verbose` | off | Print every reply |
 
 It calls OpenAI directly, so the middleware does not need to be running. It is not part of `make check`: it needs a key and costs a little on each run.

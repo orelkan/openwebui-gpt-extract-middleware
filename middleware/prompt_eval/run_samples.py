@@ -7,6 +7,8 @@ Not a unit test: it needs OPENAI_API_KEY and spends credits. Run it with
 import argparse
 import logging
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import httpx
@@ -50,6 +52,28 @@ def run_case(
     return follow_up_reply, tokens + follow_up_tokens
 
 
+def run_all_cases(
+    client: httpx.Client,
+    prompt: str,
+    model_settings: dict[str, Any],
+    cases: list[Case],
+    runs: int,
+    workers: int,
+) -> list[list[tuple[str, int]]]:
+    """Run every repeat of every case, several at a time.
+
+    Almost all the time of a run is spent waiting for the API, so the requests
+    are sent from a pool of threads. The result keeps the order of `cases`:
+    entry i holds the (reply, tokens) of each repeat of cases[i].
+    """
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [
+            [executor.submit(run_case, client, prompt, model_settings, case) for _ in range(runs)]
+            for case in cases
+        ]
+        return [[future.result() for future in case_futures] for case_futures in futures]
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", default="gpt-6-luna")
@@ -61,6 +85,7 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument("--runs", type=int, default=3, help="repeats per case")
     parser.add_argument("--case", help="run only the case with this name")
+    parser.add_argument("--workers", type=int, default=8, help="requests sent at the same time")
     parser.add_argument("--verbose", action="store_true", help="print every reply")
     return parser.parse_args()
 
@@ -96,46 +121,49 @@ def main() -> int:
     name_agreement = [0, 0]
     value_agreement = [0, 0]
 
+    started_at = time.perf_counter()
     with httpx.Client(
         base_url=settings.openai_base_url,
         headers={"Authorization": f"Bearer {settings.openai_api_key.get_secret_value()}"},
         timeout=settings.upstream_read_timeout_seconds,
     ) as client:
-        for case in cases:
-            replies = []
-            failures = []
-            for run in range(1, arguments.runs + 1):
-                reply, tokens = run_case(client, prompt, model_settings, case)
-                replies.append(reply)
-                total_tokens += tokens
-                problems = check_case(case, reply)
-                if problems:
-                    failures.append((run, problems))
-                else:
-                    passed_runs += 1
-                if arguments.verbose:
-                    logger.info("--- %s, run %d\n%s", case.name, run, reply)
+        results = run_all_cases(
+            client, prompt, model_settings, cases, arguments.runs, arguments.workers
+        )
+    elapsed_seconds = time.perf_counter() - started_at
 
-            verdict = "PASS" if not failures else "FAIL"
-            passed = arguments.runs - len(failures)
-            consistency = ""
-            if case.expects_extraction:
-                shared_names, total_names = count_shared(replies, "name")
-                shared_values, total_values = count_shared(replies, "value")
-                name_agreement[0] += shared_names
-                name_agreement[1] += total_names
-                value_agreement[0] += shared_values
-                value_agreement[1] += total_values
-                consistency = (
-                    f"  in every repeat: {shared_names}/{total_names} names, "
-                    f"{shared_values}/{total_values} values"
-                )
-            logger.info(
-                "%s %d/%d  %-21s%s", verdict, passed, arguments.runs, case.name, consistency
+    for case, case_results in zip(cases, results, strict=True):
+        replies = []
+        failures = []
+        for run, (reply, tokens) in enumerate(case_results, start=1):
+            replies.append(reply)
+            total_tokens += tokens
+            problems = check_case(case, reply)
+            if problems:
+                failures.append((run, problems))
+            else:
+                passed_runs += 1
+            if arguments.verbose:
+                logger.info("--- %s, run %d\n%s", case.name, run, reply)
+
+        verdict = "PASS" if not failures else "FAIL"
+        passed = arguments.runs - len(failures)
+        consistency = ""
+        if case.expects_extraction:
+            shared_names, total_names = count_shared(replies, "name")
+            shared_values, total_values = count_shared(replies, "value")
+            name_agreement[0] += shared_names
+            name_agreement[1] += total_names
+            value_agreement[0] += shared_values
+            value_agreement[1] += total_values
+            consistency = (
+                f"  in every repeat: {shared_names}/{total_names} names, "
+                f"{shared_values}/{total_values} values"
             )
-            for run, problems in failures:
-                for problem in problems:
-                    logger.info("       run %d: %s", run, problem)
+        logger.info("%s %d/%d  %-21s%s", verdict, passed, arguments.runs, case.name, consistency)
+        for run, problems in failures:
+            for problem in problems:
+                logger.info("       run %d: %s", run, problem)
 
     total_runs = len(cases) * arguments.runs
     logger.info("\n%d/%d runs passed", passed_runs, total_runs)
@@ -144,7 +172,12 @@ def main() -> int:
         *name_agreement,
         *value_agreement,
     )
-    logger.info("settings %s, %d tokens used", model_settings, total_tokens)
+    logger.info(
+        "settings %s, %d tokens used, %.0f seconds",
+        model_settings,
+        total_tokens,
+        elapsed_seconds,
+    )
     return 0 if passed_runs == total_runs else 1
 
 
