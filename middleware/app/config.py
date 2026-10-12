@@ -22,4 +22,6 @@ class Settings(BaseSettings):
     upstream_read_timeout_seconds: float = 120.0
     # Extra attempts when a connection to upstream cannot be opened.
     upstream_connect_retries: NonNegativeInt = 2
+    # How long /ready waits for upstream before answering "not ready".
+    readiness_timeout_seconds: float = 5.0
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
