@@ -36,30 +36,28 @@ async def handle_validation_error(request: Request, error: Exception) -> JSONRes
     return openai_error_response(400, "; ".join(problems), "invalid_request_error")
 
 
-async def handle_upstream_timeout(request: Request, error: Exception) -> JSONResponse:
-    """Answer 504 when upstream did not connect or respond within the configured timeouts."""
+async def handle_upstream_failure(request: Request, error: Exception) -> JSONResponse:
+    """Answer a request that failed before upstream gave any response.
+
+    504 when upstream did not connect or respond within the configured
+    timeouts, 502 for every other failure to reach it.
+    """
+    if isinstance(error, httpx.TimeoutException):
+        status_code = 504
+        message = "The upstream API did not respond in time"
+        error_type = "upstream_timeout"
+    else:
+        status_code = 502
+        message = "Could not reach the upstream API"
+        error_type = "upstream_unreachable"
     log_event(
         "upstream_error",
         level=logging.ERROR,
         error_type=type(error).__name__,
-        status_code=504,
+        status_code=status_code,
         mid_stream=False,
     )
-    return openai_error_response(
-        504, "The upstream API did not respond in time", "upstream_timeout"
-    )
-
-
-async def handle_upstream_unreachable(request: Request, error: Exception) -> JSONResponse:
-    """Answer 502 when the connection to upstream failed or broke before a response arrived."""
-    log_event(
-        "upstream_error",
-        level=logging.ERROR,
-        error_type=type(error).__name__,
-        status_code=502,
-        mid_stream=False,
-    )
-    return openai_error_response(502, "Could not reach the upstream API", "upstream_unreachable")
+    return openai_error_response(status_code, message, error_type)
 
 
 async def handle_unexpected_error(request: Request, error: Exception) -> JSONResponse:
@@ -70,8 +68,6 @@ async def handle_unexpected_error(request: Request, error: Exception) -> JSONRes
 def register_exception_handlers(app: FastAPI) -> None:
     """Make every error the app produces itself use the OpenAI error format."""
     app.add_exception_handler(RequestValidationError, handle_validation_error)
-    # httpx timeouts are a kind of TransportError; Starlette picks the handler
-    # of the most specific class, so timeouts get 504 and the rest 502.
-    app.add_exception_handler(httpx.TimeoutException, handle_upstream_timeout)
-    app.add_exception_handler(httpx.TransportError, handle_upstream_unreachable)
+    # TransportError covers timeouts, refused connections and broken connections.
+    app.add_exception_handler(httpx.TransportError, handle_upstream_failure)
     app.add_exception_handler(Exception, handle_unexpected_error)
