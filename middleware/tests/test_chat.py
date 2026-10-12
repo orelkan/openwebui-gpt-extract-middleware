@@ -35,6 +35,21 @@ async def broken_sse_stream() -> AsyncIterator[bytes]:
     raise httpx.ReadError("connection reset")
 
 
+MINIMAL_REQUEST: dict[str, Any] = {"model": "gpt-4o-mini", "messages": []}
+
+
+def mock_chat(upstream: respx.MockRouter, response: httpx.Response | None = None) -> respx.Route:
+    """Make the fake upstream answer chat completions, by default with a 200 completion."""
+    return upstream.post("/chat/completions").mock(
+        return_value=response or httpx.Response(200, json=COMPLETION)
+    )
+
+
+def sse_response(stream: AsyncIterator[bytes]) -> httpx.Response:
+    """A 200 upstream answer that streams the given chunks as server-sent events."""
+    return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=stream)
+
+
 def forwarded_body(route: respx.Route) -> Any:
     """The JSON body the middleware sent upstream in its last call."""
     return json.loads(route.calls.last.request.content)
@@ -43,7 +58,7 @@ def forwarded_body(route: respx.Route) -> Any:
 def test_chat_completion_returns_upstream_response(
     client: TestClient, upstream: respx.MockRouter
 ) -> None:
-    upstream.post("/chat/completions").mock(return_value=httpx.Response(200, json=COMPLETION))
+    mock_chat(upstream)
 
     response = client.post(
         "/v1/chat/completions",
@@ -58,9 +73,7 @@ def test_chat_completion_returns_upstream_response(
 def test_chat_completion_forwards_system_prompt_before_client_messages(
     client: TestClient, upstream: respx.MockRouter, system_prompt: str
 ) -> None:
-    route = upstream.post("/chat/completions").mock(
-        return_value=httpx.Response(200, json=COMPLETION)
-    )
+    route = mock_chat(upstream)
     messages = [
         {"role": "system", "content": "Client prompt"},
         {"role": "user", "content": "Hello"},
@@ -77,9 +90,7 @@ def test_chat_completion_forwards_system_prompt_before_client_messages(
 def test_chat_completion_passes_extra_fields_through_unchanged(
     client: TestClient, upstream: respx.MockRouter
 ) -> None:
-    route = upstream.post("/chat/completions").mock(
-        return_value=httpx.Response(200, json=COMPLETION)
-    )
+    route = mock_chat(upstream)
     request_body = {
         "model": "gpt-4o-mini",
         "messages": [{"role": "user", "content": "Hello"}],
@@ -100,13 +111,11 @@ def test_chat_completion_passes_extra_fields_through_unchanged(
 def test_chat_completion_calls_upstream_with_middleware_api_key(
     client: TestClient, upstream: respx.MockRouter
 ) -> None:
-    route = upstream.post("/chat/completions").mock(
-        return_value=httpx.Response(200, json=COMPLETION)
-    )
+    route = mock_chat(upstream)
 
     client.post(
         "/v1/chat/completions",
-        json={"model": "gpt-4o-mini", "messages": []},
+        json=MINIMAL_REQUEST,
         headers={"Authorization": "Bearer key-from-open-webui"},
     )
 
@@ -119,9 +128,9 @@ def test_chat_completion_passes_through_upstream_error(
     client: TestClient, upstream: respx.MockRouter
 ) -> None:
     error = {"error": {"message": "The server had an error", "type": "server_error"}}
-    upstream.post("/chat/completions").mock(return_value=httpx.Response(500, json=error))
+    mock_chat(upstream, httpx.Response(500, json=error))
 
-    response = client.post("/v1/chat/completions", json={"model": "gpt-4o-mini", "messages": []})
+    response = client.post("/v1/chat/completions", json=MINIMAL_REQUEST)
 
     assert response.status_code == 500
     assert response.json() == error
@@ -139,11 +148,7 @@ def test_chat_completion_rejects_request_without_messages(client: TestClient) ->
 def test_streaming_chat_completion_forwards_whole_stream(
     client: TestClient, upstream: respx.MockRouter, system_prompt: str
 ) -> None:
-    route = upstream.post("/chat/completions").mock(
-        return_value=httpx.Response(
-            200, headers={"content-type": "text/event-stream"}, content=sse_stream()
-        )
-    )
+    route = mock_chat(upstream, sse_response(sse_stream()))
 
     with client.stream(
         "POST",
@@ -170,12 +175,9 @@ def test_streaming_chat_completion_passes_through_upstream_error(
     client: TestClient, upstream: respx.MockRouter
 ) -> None:
     error = {"error": {"message": "Rate limit reached", "type": "rate_limit_error"}}
-    upstream.post("/chat/completions").mock(return_value=httpx.Response(429, json=error))
+    mock_chat(upstream, httpx.Response(429, json=error))
 
-    response = client.post(
-        "/v1/chat/completions",
-        json={"model": "gpt-4o-mini", "messages": [], "stream": True},
-    )
+    response = client.post("/v1/chat/completions", json=MINIMAL_REQUEST | {"stream": True})
 
     assert response.status_code == 429
     assert response.headers["content-type"] == "application/json"
@@ -231,10 +233,7 @@ def test_chat_completion_maps_upstream_failure_to_gateway_error(
 ) -> None:
     upstream.post("/chat/completions").mock(side_effect=upstream_failure)
 
-    response = client.post(
-        "/v1/chat/completions",
-        json={"model": "gpt-4o-mini", "messages": [], "stream": stream},
-    )
+    response = client.post("/v1/chat/completions", json=MINIMAL_REQUEST | {"stream": stream})
 
     assert response.status_code == expected_status
     assert response.headers["content-type"] == "application/json"
@@ -257,10 +256,7 @@ def test_chat_completion_returns_upstream_json_error_as_json_even_if_labelled_te
         )
     )
 
-    response = client.post(
-        "/v1/chat/completions",
-        json={"model": "gpt-4o-mini", "messages": [], "stream": stream},
-    )
+    response = client.post("/v1/chat/completions", json=MINIMAL_REQUEST | {"stream": stream})
 
     assert response.status_code == upstream_status
     assert response.headers["content-type"] == "application/json"
@@ -270,11 +266,9 @@ def test_chat_completion_returns_upstream_json_error_as_json_even_if_labelled_te
 def test_chat_completion_wraps_non_json_upstream_error_in_openai_format(
     client: TestClient, upstream: respx.MockRouter
 ) -> None:
-    upstream.post("/chat/completions").mock(
-        return_value=httpx.Response(502, html="<html><body>Bad Gateway</body></html>")
-    )
+    mock_chat(upstream, httpx.Response(502, html="<html><body>Bad Gateway</body></html>"))
 
-    response = client.post("/v1/chat/completions", json={"model": "gpt-4o-mini", "messages": []})
+    response = client.post("/v1/chat/completions", json=MINIMAL_REQUEST)
 
     assert response.status_code == 502
     assert response.json()["error"] == {
@@ -288,16 +282,9 @@ def test_chat_completion_wraps_non_json_upstream_error_in_openai_format(
 def test_streaming_chat_completion_reports_mid_stream_failure_inside_the_stream(
     client: TestClient, upstream: respx.MockRouter, log_entries: list[dict[str, Any]]
 ) -> None:
-    upstream.post("/chat/completions").mock(
-        return_value=httpx.Response(
-            200, headers={"content-type": "text/event-stream"}, content=broken_sse_stream()
-        )
-    )
+    mock_chat(upstream, sse_response(broken_sse_stream()))
 
-    response = client.post(
-        "/v1/chat/completions",
-        json={"model": "gpt-4o-mini", "messages": [], "stream": True},
-    )
+    response = client.post("/v1/chat/completions", json=MINIMAL_REQUEST | {"stream": True})
 
     assert response.status_code == 200
     assert response.content.startswith(SSE_CHUNKS[0])
@@ -337,7 +324,7 @@ def test_count_content_chars_adds_up_text_contents_only() -> None:
 def test_chat_completion_logs_its_lifecycle_in_order(
     client: TestClient, upstream: respx.MockRouter, log_entries: list[dict[str, Any]]
 ) -> None:
-    upstream.post("/chat/completions").mock(return_value=httpx.Response(200, json=COMPLETION))
+    mock_chat(upstream)
 
     client.post(
         "/v1/chat/completions",
@@ -365,16 +352,9 @@ def test_chat_completion_logs_its_lifecycle_in_order(
 def test_streaming_chat_completion_logs_its_lifecycle_in_order(
     client: TestClient, upstream: respx.MockRouter, log_entries: list[dict[str, Any]]
 ) -> None:
-    upstream.post("/chat/completions").mock(
-        return_value=httpx.Response(
-            200, headers={"content-type": "text/event-stream"}, content=sse_stream()
-        )
-    )
+    mock_chat(upstream, sse_response(sse_stream()))
 
-    client.post(
-        "/v1/chat/completions",
-        json={"model": "gpt-4o-mini", "messages": [], "stream": True},
-    )
+    client.post("/v1/chat/completions", json=MINIMAL_REQUEST | {"stream": True})
 
     assert [entry["event"] for entry in log_entries] == [
         "request_received",
@@ -400,9 +380,7 @@ def test_logs_contain_no_secrets_and_no_message_content(
     error = {"error": {"message": "Incorrect API key provided", "type": "invalid_request_error"}}
     upstream.post("/chat/completions").mock(
         side_effect=[
-            httpx.Response(
-                200, headers={"content-type": "text/event-stream"}, content=sse_stream()
-            ),
+            sse_response(sse_stream()),
             httpx.Response(401, json=error),
         ]
     )
