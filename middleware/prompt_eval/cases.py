@@ -39,7 +39,22 @@ CASES = [
     ),
     Case(name="job_listing", sample="job_listing.txt", language="en", min_fields=6),
     Case(name="medical_report", sample="medical_report.txt", language="en", min_fields=6),
-    Case(name="legal_paragraph", sample="legal_paragraph.txt", language="en", min_fields=3),
+    Case(name="legal_paragraph", sample="legal_paragraph.txt", language="en", min_fields=4),
+    Case(
+        name="payment_confirmation",
+        sample="payment_confirmation.txt",
+        language="en",
+        min_fields=8,
+        required_fields=("iban", "amount", "card"),
+    ),
+    Case(
+        name="personal_record",
+        sample="personal_record.txt",
+        language="en",
+        min_fields=8,
+        required_fields=("passport", "birth", "address"),
+        uncertain_field="start",
+    ),
     Case(
         name="invoice_no_year",
         sample="invoice_no_year.txt",

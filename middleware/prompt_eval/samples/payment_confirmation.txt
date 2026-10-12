@@ -1,0 +1,10 @@
+PAYMENT RECEIPT - Harbourline Bank
+Ref no: TXN-88420-KD
+Date/time: 14 Sep 2026 10:42 CET
+From: Elena Markovic (acct ending 3391)
+To: Studio Nordlys ApS
+IBAN: DK50 0040 0440 1162 43   BIC: DABADKKK
+Amount: 2,450.00 DKK   Fee: 15.00 DKK
+Message: "Deposit - wedding photos, inv 2026-117"
+Fee charged to: Mastercard **** **** **** 5067
+Status: COMPLETED
