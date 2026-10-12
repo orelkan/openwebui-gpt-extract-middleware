@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from prompt_eval.cases import CASES, SAMPLES_DIR, Case, check_case, count_shared_field_names
+from prompt_eval.cases import CASES, SAMPLES_DIR, Case, check_case, count_shared
 
 
 def extraction_reply(**changes: Any) -> str:
@@ -130,17 +130,19 @@ def field(name: str, value: str) -> dict[str, Any]:
     return {"name": name, "value": value, "uncertain": False, "confidence": 0.95, "note": None}
 
 
-def test_identical_repeats_share_every_field_name() -> None:
+def test_identical_repeats_share_every_name_and_value() -> None:
     reply = extraction_reply(fields=[field("total", "$5"), field("date", "May 1, 2026")])
 
-    assert count_shared_field_names([reply, reply, reply]) == (2, 2)
+    assert count_shared([reply, reply, reply], "name") == (2, 2)
+    assert count_shared([reply, reply, reply], "value") == (2, 2)
 
 
-def test_field_order_and_values_do_not_affect_shared_names() -> None:
-    first = extraction_reply(fields=[field("total", "$5"), field("date", "May 1, 2026")])
-    second = extraction_reply(fields=[field("date", "1 May 2026"), field("total", "5 USD")])
+def test_same_values_under_different_names_agree_on_values_only() -> None:
+    first = extraction_reply(fields=[field("total", "$5"), field("date", "May 1")])
+    second = extraction_reply(fields=[field("total_amount", "$5"), field("date", "May 1")])
 
-    assert count_shared_field_names([first, second]) == (2, 2)
+    assert count_shared([first, second], "name") == (1, 3)
+    assert count_shared([first, second], "value") == (2, 2)
 
 
 def test_only_names_present_in_every_repeat_are_shared() -> None:
@@ -148,17 +150,16 @@ def test_only_names_present_in_every_repeat_are_shared() -> None:
     second = extraction_reply(fields=[field("total", "$5"), field("due_date", "May 1")])
     third = extraction_reply(fields=[field("total", "$5")])
 
-    assert count_shared_field_names([first, second, third]) == (1, 3)
+    assert count_shared([first, second, third], "name") == (1, 3)
 
 
 def test_replies_that_break_the_format_are_left_out_of_the_count() -> None:
     reply = extraction_reply(fields=[field("total", "$5")])
 
-    assert count_shared_field_names([reply, "Sorry, I cannot help.", "```json\n{}\n```"]) == (
-        1,
-        1,
-    )
+    replies = [reply, "Sorry, I cannot help.", "```json\n{}\n```"]
+
+    assert count_shared(replies, "name") == (1, 1)
 
 
-def test_no_valid_reply_gives_zero_names() -> None:
-    assert count_shared_field_names(["Sorry, I cannot help."]) == (0, 0)
+def test_no_valid_reply_gives_zero() -> None:
+    assert count_shared(["Sorry, I cannot help."], "name") == (0, 0)

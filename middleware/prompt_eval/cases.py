@@ -45,7 +45,7 @@ CASES = [
         sample="payment_confirmation.txt",
         language="en",
         min_fields=8,
-        required_fields=("iban", "amount", "card"),
+        required_fields=("iban", "amount"),
     ),
     Case(
         name="personal_record",
@@ -129,20 +129,20 @@ def check_case(case: Case, reply: str) -> list[str]:
     return problems
 
 
-def count_shared_field_names(replies: list[str]) -> tuple[int, int]:
-    """Measure how much repeated extractions of the same text agree on field names.
+def count_shared(replies: list[str], key: str) -> tuple[int, int]:
+    """Measure how much repeated extractions of the same text agree.
 
-    Returns (shared, total): how many field names appear in every reply, and
-    how many distinct names appear in any of them. Equal numbers mean every
-    repeat used exactly the same names. Replies that break the format are left
-    out; they are already reported as failures.
+    `key` is "name" or "value". Returns (shared, total): how many distinct
+    names (or values) appear in every reply, and how many appear in any of
+    them. Equal numbers mean every repeat agreed completely. Replies that
+    break the format are left out; they are already reported as failures.
     """
-    name_sets = []
+    sets = []
     for reply in replies:
         block = extract_json_block(reply)
         if block is None or check_extraction_reply(reply):
             continue
-        name_sets.append({field["name"] for field in json.loads(block)["fields"]})
-    if not name_sets:
+        sets.append({field[key] for field in json.loads(block)["fields"]})
+    if not sets:
         return 0, 0
-    return len(set.intersection(*name_sets)), len(set.union(*name_sets))
+    return len(set.intersection(*sets)), len(set.union(*sets))

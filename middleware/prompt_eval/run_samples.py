@@ -13,7 +13,7 @@ import httpx
 
 from app.config import Settings
 from app.prompt import inject_system_prompt, load_system_prompt
-from prompt_eval.cases import CASES, SAMPLES_DIR, Case, check_case, count_shared_field_names
+from prompt_eval.cases import CASES, SAMPLES_DIR, Case, check_case, count_shared
 
 logger = logging.getLogger("prompt_eval")
 
@@ -92,8 +92,9 @@ def main() -> int:
     cases = [case for case in CASES if arguments.case in (None, case.name)]
     passed_runs = 0
     total_tokens = 0
-    shared_names = 0
-    total_names = 0
+    # [shared, total], summed over all extraction cases.
+    name_agreement = [0, 0]
+    value_agreement = [0, 0]
 
     with httpx.Client(
         base_url=settings.openai_base_url,
@@ -119,12 +120,18 @@ def main() -> int:
             passed = arguments.runs - len(failures)
             consistency = ""
             if case.expects_extraction:
-                shared, total = count_shared_field_names(replies)
-                shared_names += shared
-                total_names += total
-                consistency = f"  {shared}/{total} field names in every repeat"
+                shared_names, total_names = count_shared(replies, "name")
+                shared_values, total_values = count_shared(replies, "value")
+                name_agreement[0] += shared_names
+                name_agreement[1] += total_names
+                value_agreement[0] += shared_values
+                value_agreement[1] += total_values
+                consistency = (
+                    f"  in every repeat: {shared_names}/{total_names} names, "
+                    f"{shared_values}/{total_values} values"
+                )
             logger.info(
-                "%s %d/%d  %-18s%s", verdict, passed, arguments.runs, case.name, consistency
+                "%s %d/%d  %-21s%s", verdict, passed, arguments.runs, case.name, consistency
             )
             for run, problems in failures:
                 for problem in problems:
@@ -133,7 +140,9 @@ def main() -> int:
     total_runs = len(cases) * arguments.runs
     logger.info("\n%d/%d runs passed", passed_runs, total_runs)
     logger.info(
-        "%d/%d field names appeared in every repeat of their case", shared_names, total_names
+        "in every repeat of their case: %d/%d field names, %d/%d values",
+        *name_agreement,
+        *value_agreement,
     )
     logger.info("settings %s, %d tokens used", model_settings, total_tokens)
     return 0 if passed_runs == total_runs else 1
