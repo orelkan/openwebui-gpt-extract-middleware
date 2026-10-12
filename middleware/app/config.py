@@ -16,3 +16,6 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr
     openai_base_url: str = "https://api.openai.com/v1"
     system_prompt_path: Path = DEFAULT_SYSTEM_PROMPT_PATH
+    upstream_connect_timeout_seconds: float = 10.0
+    # Time allowed between two chunks from upstream, not for the whole response.
+    upstream_read_timeout_seconds: float = 120.0
