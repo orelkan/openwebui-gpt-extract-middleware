@@ -3,6 +3,7 @@
 import json
 import logging
 import sys
+import time
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
@@ -54,3 +55,8 @@ def log_event(
 ) -> None:
     """Log a named event with structured fields."""
     logger.log(level, event, exc_info=exc_info, extra={"fields": fields})
+
+
+def elapsed_ms(started_at: float) -> float:
+    """Milliseconds passed since a time.perf_counter() reading."""
+    return round((time.perf_counter() - started_at) * 1000, 1)
