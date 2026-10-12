@@ -122,7 +122,10 @@ def test_chat_completion_passes_through_upstream_error(
 def test_chat_completion_rejects_request_without_messages(client: TestClient) -> None:
     response = client.post("/v1/chat/completions", json={"model": "gpt-4o-mini"})
 
-    assert response.status_code == 422
+    assert response.status_code == 400
+    error = response.json()["error"]
+    assert error["type"] == "invalid_request_error"
+    assert "messages" in error["message"]
 
 
 def test_streaming_chat_completion_forwards_whole_stream(

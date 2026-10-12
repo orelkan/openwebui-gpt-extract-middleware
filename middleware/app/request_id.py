@@ -46,6 +46,11 @@ class RequestIdMiddleware:
         log_event(logger, "request_received", method=scope["method"], path=scope["path"])
         try:
             await self.app(scope, receive, send_with_request_id)
+        except Exception:
+            # Logged here, where the request ID is still set; the 500 response
+            # itself is produced further out by the app's catch-all handler.
+            log_event(logger, "unhandled_error", level=logging.ERROR, exc_info=True)
+            raise
         finally:
             log_event(
                 logger,

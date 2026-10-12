@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.config import Settings
+from app.errors import register_exception_handlers
 from app.logging import configure_logging, log_event
 from app.prompt import load_system_prompt
 from app.request_id import RequestIdMiddleware
@@ -43,6 +44,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="GPT Extract Middleware", lifespan=lifespan)
     app.state.settings = settings
     app.add_middleware(RequestIdMiddleware)
+    register_exception_handlers(app)
     app.include_router(health.router)
     app.include_router(models.router)
     app.include_router(chat.router)
