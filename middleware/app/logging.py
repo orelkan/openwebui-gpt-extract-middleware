@@ -8,6 +8,9 @@ from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
 
+# Every event of the app goes through this one logger.
+logger = logging.getLogger("app")
+
 # Set by the request ID middleware. A context variable follows the request
 # through every await, so log calls do not need the ID passed to them.
 request_id_var: ContextVar[str | None] = ContextVar("request_id", default=None)
@@ -20,7 +23,6 @@ class JsonFormatter(logging.Formatter):
         entry: dict[str, Any] = {
             "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "level": record.levelname,
-            "logger": record.name,
             "event": record.getMessage(),
             "request_id": request_id_var.get(),
             **getattr(record, "fields", {}),
@@ -37,22 +39,15 @@ def configure_logging(level: str) -> None:
     """
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter())
-    for name in ("app", "uvicorn"):
-        logger = logging.getLogger(name)
-        logger.handlers = [handler]
-        logger.setLevel(level)
+    for configured_logger in (logger, logging.getLogger("uvicorn")):
+        configured_logger.handlers = [handler]
+        configured_logger.setLevel(level)
     # Our request_completed event carries the same information as uvicorn's
     # access log, in JSON and with the request ID.
     logging.getLogger("uvicorn.access").disabled = True
 
 
-def log_event(
-    logger: logging.Logger,
-    event: str,
-    level: int = logging.INFO,
-    exc_info: bool = False,
-    **fields: Any,
-) -> None:
+def log_event(event: str, level: int = logging.INFO, exc_info: bool = False, **fields: Any) -> None:
     """Log a named event with structured fields."""
     logger.log(level, event, exc_info=exc_info, extra={"fields": fields})
 

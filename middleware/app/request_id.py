@@ -11,8 +11,6 @@ from app.logging import elapsed_ms, log_event, request_id_var
 
 REQUEST_ID_HEADER = "X-Request-ID"
 
-logger = logging.getLogger(__name__)
-
 
 class RequestIdMiddleware:
     """Tag each HTTP request with an ID, reusing the caller's X-Request-ID if sent.
@@ -43,17 +41,16 @@ class RequestIdMiddleware:
                 MutableHeaders(scope=message)[REQUEST_ID_HEADER] = request_id
             await send(message)
 
-        log_event(logger, "request_received", method=scope["method"], path=scope["path"])
+        log_event("request_received", method=scope["method"], path=scope["path"])
         try:
             await self.app(scope, receive, send_with_request_id)
         except Exception:
             # Logged here, where the request ID is still set; the 500 response
             # itself is produced further out by the app's catch-all handler.
-            log_event(logger, "unhandled_error", level=logging.ERROR, exc_info=True)
+            log_event("unhandled_error", level=logging.ERROR, exc_info=True)
             raise
         finally:
             log_event(
-                logger,
                 "request_completed",
                 status_code=status_code,
                 latency_ms=elapsed_ms(started_at),

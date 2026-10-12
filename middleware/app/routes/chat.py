@@ -16,7 +16,6 @@ from app.prompt import inject_system_prompt
 from app.upstream import passthrough_response
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 
 class ChatCompletionRequest(BaseModel):
@@ -89,12 +88,11 @@ async def stream_upstream_body(
     try:
         async for chunk in upstream_response.aiter_bytes():
             if chunk_count == 0:
-                log_event(logger, "upstream_first_byte", latency_ms=elapsed_ms(sent_at))
+                log_event("upstream_first_byte", latency_ms=elapsed_ms(sent_at))
             chunk_count += 1
             byte_count += len(chunk)
             yield chunk
         log_event(
-            logger,
             "stream_completed",
             chunk_count=chunk_count,
             bytes=byte_count,
@@ -102,7 +100,6 @@ async def stream_upstream_body(
         )
     except httpx.TransportError as error:
         log_event(
-            logger,
             "upstream_error",
             level=logging.ERROR,
             error_type=type(error).__name__,
@@ -117,7 +114,6 @@ async def stream_upstream_body(
 def log_upstream_response(upstream_response: httpx.Response, sent_at: float) -> None:
     """Log the status upstream answered with and how long it took to answer."""
     log_event(
-        logger,
         "upstream_response_received",
         status_code=upstream_response.status_code,
         latency_ms=elapsed_ms(sent_at),
@@ -159,7 +155,6 @@ async def chat_completions(chat_request: ChatCompletionRequest, request: Request
     upstream_client: httpx.AsyncClient = request.app.state.upstream_client
     payload = build_upstream_payload(chat_request, request.app.state.system_prompt)
     log_event(
-        logger,
         "prompt_injected",
         model=chat_request.model,
         stream=chat_request.stream,
@@ -167,7 +162,6 @@ async def chat_completions(chat_request: ChatCompletionRequest, request: Request
         content_chars=count_content_chars(chat_request.messages),
     )
     log_event(
-        logger,
         "upstream_request_sent",
         path="/chat/completions",
         model=chat_request.model,

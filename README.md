@@ -68,7 +68,7 @@ Every response carries an `X-Request-ID` header: the caller's own if it sent one
 Logs are written to stdout as one JSON object per line. Every line of a request carries the same `request_id`.
 
 ```json
-{"timestamp": "2026-10-12T12:58:01.120+00:00", "level": "INFO", "logger": "app.routes.chat", "event": "prompt_injected", "request_id": "3f2c...", "model": "gpt-4o-mini", "stream": true, "message_count": 1, "content_chars": 412}
+{"timestamp": "2026-10-12T12:58:01.120+00:00", "level": "INFO", "event": "prompt_injected", "request_id": "3f2c...", "model": "gpt-4o-mini", "stream": true, "message_count": 1, "content_chars": 412}
 ```
 
 | Event | Meaning |

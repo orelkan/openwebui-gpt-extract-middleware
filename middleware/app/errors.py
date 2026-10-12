@@ -9,8 +9,6 @@ from fastapi.responses import JSONResponse
 
 from app.logging import log_event
 
-logger = logging.getLogger(__name__)
-
 
 def openai_error_response(
     status_code: int, message: str, error_type: str, code: str | None = None
@@ -41,7 +39,6 @@ async def handle_validation_error(request: Request, error: Exception) -> JSONRes
 async def handle_upstream_timeout(request: Request, error: Exception) -> JSONResponse:
     """Answer 504 when upstream did not connect or respond within the configured timeouts."""
     log_event(
-        logger,
         "upstream_error",
         level=logging.ERROR,
         error_type=type(error).__name__,
@@ -56,7 +53,6 @@ async def handle_upstream_timeout(request: Request, error: Exception) -> JSONRes
 async def handle_upstream_unreachable(request: Request, error: Exception) -> JSONResponse:
     """Answer 502 when the connection to upstream failed or broke before a response arrived."""
     log_event(
-        logger,
         "upstream_error",
         level=logging.ERROR,
         error_type=type(error).__name__,

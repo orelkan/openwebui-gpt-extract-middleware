@@ -22,7 +22,6 @@ def test_json_formatter_writes_one_json_object_per_line() -> None:
     entry = json.loads(line)
     assert entry["event"] == "it_happened"
     assert entry["level"] == "INFO"
-    assert entry["logger"] == "app.test"
     assert entry["timestamp"].endswith("+00:00")
     assert entry["request_id"] is None
 
@@ -63,7 +62,7 @@ def test_configure_logging_writes_app_events_to_stdout_as_json(
 ) -> None:
     configure_logging("INFO")
 
-    log_event(logging.getLogger("app.test"), "something_happened", count=3)
+    log_event("something_happened", count=3)
 
     entry = json.loads(capsys.readouterr().out)
     assert entry["event"] == "something_happened"
@@ -75,6 +74,6 @@ def test_configure_logging_drops_events_below_the_level(
 ) -> None:
     configure_logging("WARNING")
 
-    log_event(logging.getLogger("app.test"), "something_happened")
+    log_event("something_happened")
 
     assert capsys.readouterr().out == ""

@@ -10,7 +10,6 @@ from app.config import Settings
 from app.logging import log_event
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
 
 @router.get("/health")
@@ -21,7 +20,7 @@ async def health() -> dict[str, str]:
 
 def not_ready(reason: str) -> JSONResponse:
     """Build the 503 answer of the readiness check and log why."""
-    log_event(logger, "readiness_check_failed", level=logging.WARNING, reason=reason)
+    log_event("readiness_check_failed", level=logging.WARNING, reason=reason)
     return JSONResponse(status_code=503, content={"status": "not_ready", "reason": reason})
 
 

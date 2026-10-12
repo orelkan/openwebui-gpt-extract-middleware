@@ -1,6 +1,5 @@
 """Application factory."""
 
-import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -14,8 +13,6 @@ from app.request_id import RequestIdMiddleware
 from app.routes import chat, health, models
 from app.upstream import create_upstream_client
 
-logger = logging.getLogger(__name__)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -25,7 +22,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     async with create_upstream_client(settings) as upstream_client:
         app.state.upstream_client = upstream_client
         log_event(
-            logger,
             "startup_completed",
             upstream_base_url=settings.openai_base_url,
             system_prompt_chars=len(app.state.system_prompt),
