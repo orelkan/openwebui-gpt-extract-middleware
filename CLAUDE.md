@@ -177,7 +177,7 @@ middleware/
 
 Update the checkboxes as milestones are completed.
 
-### [ ] Milestone 0: Project scaffolding
+### [x] Milestone 0: Project scaffolding
 - `git init`, `.gitignore`, `README.md` skeleton, `.env.example`.
 - Middleware `pyproject.toml` with uv, ruff, mypy, pytest config.
 - Minimal FastAPI app with app factory, config via pydantic-settings, and `GET /health`.
@@ -220,14 +220,16 @@ Update the checkboxes as milestones are completed.
 
 ## 8. Commands
 
-To be filled in during Milestone 0 once the tooling is set up. Keep this section accurate as commands change.
+Run from the repository root. Keep this section accurate as commands change.
 
 ```bash
-# install:      TBD
-# format:       TBD
-# lint:         TBD
-# typecheck:    TBD
-# test:         TBD
-# run stack:    TBD
-# stop stack:   TBD
+make install      # uv sync in middleware/
+make format       # ruff format + ruff check --fix
+make lint         # ruff format --check + ruff check
+make typecheck    # mypy (strict) on app and tests
+make test         # pytest with coverage report
+make check        # lint + typecheck + test
+make run          # run the middleware locally with reload (needs OPENAI_API_KEY)
+# run stack:      TBD (Milestone 4)
+# stop stack:     TBD (Milestone 4)
 ```
