@@ -25,3 +25,14 @@ class Settings(BaseSettings):
     # How long /ready waits for upstream before answering "not ready".
     readiness_timeout_seconds: float = 5.0
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+
+
+def load_settings() -> Settings:
+    """Build the settings from environment variables.
+
+    Fails with a validation error when a required variable is missing.
+    """
+    # pydantic-settings fills the required fields from the environment when the
+    # class is called with no arguments. mypy knows this through the pydantic
+    # plugin; Pyright (VS Code's Pylance) does not, so it is told here, once.
+    return Settings()  # pyright: ignore[reportCallIssue]

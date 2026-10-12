@@ -11,7 +11,7 @@ from typing import Any
 
 import httpx
 
-from app.config import Settings
+from app.config import load_settings
 from app.prompt import inject_system_prompt, load_system_prompt
 from prompt_eval.cases import CASES, SAMPLES_DIR, Case, check_case, count_shared
 
@@ -86,7 +86,7 @@ def main() -> int:
     # httpx logs every request at INFO, which would drown the report.
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
-    settings = Settings()
+    settings = load_settings()
     prompt = load_system_prompt(settings.system_prompt_path)
     model_settings = build_model_settings(arguments)
     cases = [case for case in CASES if arguments.case in (None, case.name)]

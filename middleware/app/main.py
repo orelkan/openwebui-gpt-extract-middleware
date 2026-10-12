@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.config import Settings
+from app.config import Settings, load_settings
 from app.errors import register_exception_handlers
 from app.logging import configure_logging, log_event
 from app.prompt import load_system_prompt
@@ -39,7 +39,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     Settings are read from the environment unless given explicitly, which lets
     tests build an app without any environment variables.
     """
-    settings = settings or Settings()
+    settings = settings or load_settings()
     configure_logging(settings.log_level)
     app = FastAPI(title="GPT Extract Middleware", lifespan=lifespan)
     app.state.settings = settings
