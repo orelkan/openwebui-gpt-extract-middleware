@@ -44,7 +44,7 @@ These are always uncertain, with a confidence of 0.8 or lower, however clearly t
 - a date with no year, such as "May 1" or "Friday 6 March";
 - a relative date or time, such as "next Friday", "end of month" or "in two weeks";
 - an amount with no currency;
-- a name that could be a person or an organization;
+- a bare name when nothing at all in the text shows whether it is a person or an organization. An ordinary personal name, a company suffix such as "Ltd" or "Inc", a title such as "Dr." or a role such as "Customer" makes it clear, and then the name is certain;
 - an abbreviation or label you had to interpret to know what the value is;
 - anything you inferred that the text does not state.
 
