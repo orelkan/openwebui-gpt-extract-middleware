@@ -1,0 +1,18 @@
+Senior Backend Engineer (Python) - Remote, EU time zones
+
+Tidewater Analytics is hiring!! We build forecasting tools for mid-size logistics companies
+and we're a team of ~40.
+
+What you'll do
+- own services in our ingestion pipeline (FastAPI, Postgres, Kafka)
+- mentor 2-3 engineers
+- on-call roughly one week in six
+
+What we're looking for
+5+ yrs backend experience, strong Python, comfortable with SQL. Kubernetes is a plus, not
+a must. Experience with time-series data would be great.
+
+Comp: 85-105k EUR depending on experience + equity. 28 days holiday.
+
+Apply by end of month to jobs@tidewater-analytics.example with a CV, no cover letter needed.
+Start date flexible, ideally Q3.

@@ -1,0 +1,11 @@
+hey can you look at these two things
+
+--- forwarded ---
+From: billing@cloudharbor.example
+Subject: Your March statement
+Your CloudHarbor statement for March 2026 is ready. Amount due: USD 1,284.10. Payment
+will be collected automatically on 5 April 2026 from the card ending 9021.
+
+--- also this from the notice board ---
+LOST CAT - grey tabby, answers to "Miso", last seen near Elm Street park on Sunday evening.
+Blue collar, no tag. Reward offered. Call Jonas 555-0164.

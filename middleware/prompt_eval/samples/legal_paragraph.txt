@@ -1,0 +1,10 @@
+7.2 Limitation of Liability. Except for breaches of Section 5 (Confidentiality) and the
+indemnification obligations under Section 8, in no event shall either party's aggregate
+liability arising out of or related to this Agreement exceed the total fees paid by
+Customer to Provider in the twelve (12) months immediately preceding the event giving rise
+to the claim. Neither party shall be liable for any indirect, incidental, special or
+consequential damages, including loss of profits or data, even if advised of the
+possibility of such damages. This Section 7.2 shall survive termination of this Agreement
+and shall be governed by the laws of the State of Delaware, without regard to its conflict
+of laws principles. Any claim must be brought within one (1) year after the cause of
+action accrues.

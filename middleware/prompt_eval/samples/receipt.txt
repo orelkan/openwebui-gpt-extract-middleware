@@ -1,0 +1,21 @@
+   GREENLEAF MARKET
+   214 Harbor St, Portland OR
+   Tel (503) 555-0188
+
+03/14/2026  18:42   REG 04  CASHIER: DEV
+
+ORG BANANAS 1.24 lb @ 0.79/lb     0.98
+OAT MILK 64OZ                     4.49
+SOURDOUGH LOAF                    6.25
+  MEMBER DISC                    -1.00
+EGGS LRG DZN  2 @ 3.99            7.98
+
+SUBTOTAL                         18.70
+TAX                               0.00
+TOTAL                           $18.70
+
+VISA ************4417            18.70
+AUTH 08812Z
+
+ITEMS SOLD 5
+THANK YOU - RETURNS W/ RECEIPT IN 30 DAYS

@@ -1,0 +1,23 @@
+From: Maya Lindqvist <maya.lindqvist@northwind-labs.example>
+To: Tomas Rivera <t.rivera@northwind-labs.example>
+Cc: ops-team@northwind-labs.example
+Date: Tue, 3 Mar 2026 09:14:22 +0100
+Subject: RE: Q2 vendor onboarding - need your sign-off by Friday
+
+Hi Tomas,
+
+Quick follow up from yesterday's call. Legal cleared the Brightpath contract (ref BP-2291) so
+the only thing blocking us is your sign-off on the budget, which came in at EUR 48,500 -
+about 6% over what we planned.
+
+Can you approve by Friday 6 March? If it slips, onboarding moves to the week of the 16th
+and we lose the early-payment discount.
+
+Also, Priya asked whether we still need the second security review. I said probably not
+but please confirm.
+
+Thanks,
+Maya
+
+Maya Lindqvist | Procurement Lead
++46 8 555 0142
