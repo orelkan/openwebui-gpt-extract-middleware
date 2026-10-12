@@ -31,13 +31,14 @@ def test_prompt_in_doc_fails_clearly_when_the_markers_are_missing() -> None:
         prompt_in_doc("# System prompt\n\nNo markers here.")
 
 
-def test_example_in_the_prompt_follows_the_format_it_teaches() -> None:
+def test_every_example_in_the_prompt_follows_the_format_it_teaches() -> None:
     prompt = load_system_prompt(DEFAULT_SYSTEM_PROMPT_PATH)
 
     examples = re.findall(r"```json\n.*?\n```", prompt, re.DOTALL)
 
-    assert len(examples) == 1
-    assert check_extraction_reply(examples[0]) == []
+    assert len(examples) == 3
+    for example in examples:
+        assert check_extraction_reply(example) == []
 
 
 def test_prompt_names_every_key_the_format_checker_requires() -> None:
