@@ -7,6 +7,7 @@ from fastapi import Response
 
 from app.config import Settings
 from app.errors import openai_error_response
+from app.logging import elapsed_ms, log_event
 
 
 def create_upstream_client(settings: Settings) -> httpx.AsyncClient:
@@ -27,6 +28,18 @@ def create_upstream_client(settings: Settings) -> httpx.AsyncClient:
             connect=settings.upstream_connect_timeout_seconds,
         ),
         transport=httpx.AsyncHTTPTransport(retries=settings.upstream_connect_retries),
+    )
+
+
+def log_upstream_response(upstream_response: httpx.Response, sent_at: float) -> None:
+    """Log the status upstream answered with and how long it took to answer.
+
+    `sent_at` is the time.perf_counter() reading taken when the request was sent.
+    """
+    log_event(
+        "upstream_response_received",
+        status_code=upstream_response.status_code,
+        latency_ms=elapsed_ms(sent_at),
     )
 
 

@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict
 from app.errors import openai_error_body
 from app.logging import elapsed_ms, log_event
 from app.prompt import inject_system_prompt
-from app.upstream import passthrough_response
+from app.upstream import log_upstream_response, passthrough_response
 
 router = APIRouter()
 
@@ -105,15 +105,6 @@ async def stream_upstream_body(
         yield stream_error_event()
     finally:
         await upstream_response.aclose()
-
-
-def log_upstream_response(upstream_response: httpx.Response, sent_at: float) -> None:
-    """Log the status upstream answered with and how long it took to answer."""
-    log_event(
-        "upstream_response_received",
-        status_code=upstream_response.status_code,
-        latency_ms=elapsed_ms(sent_at),
-    )
 
 
 async def forward_streaming(
