@@ -191,7 +191,7 @@ Update the checkboxes as milestones are completed.
 - `GET /v1/models` passthrough.
 - Unit tests for all of the above with mocked upstream.
 
-### [ ] Milestone 2: Observability and resilience
+### [x] Milestone 2: Observability and resilience
 - Structured JSON logging with request ID middleware and lifecycle events.
 - Timeouts, upstream error mapping, mid-stream failure handling, optional retry policy.
 - `GET /ready` with agreed readiness semantics.
