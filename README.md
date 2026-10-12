@@ -150,7 +150,9 @@ All checks passed.
 
 7. **Check persistence.** Run `make down`, then `make up`, and reload the page. The chat is still in the sidebar.
 
-8. **See a failure reach the page.** Put a wrong value in `OPENAI_API_KEY` in `.env` and run `make up` again (it recreates the middleware). `curl localhost:8000/ready` now answers 503 with `"reason": "upstream returned 401"`, and sending a message in the page shows OpenAI's "Incorrect API key provided" error instead of an answer. Restore the key and run `make up` once more.
+8. **See failures being reported.**
+   - **An error from OpenAI.** Select `text-embedding-3-small`, a model that cannot chat, and send a message. Instead of an answer, Open WebUI shows OpenAI's own message, "You are not allowed to sample from this model". The middleware passed OpenAI's 403 through unchanged, and the log shows `upstream_response_received` with that status.
+   - **A wrong API key.** Put a wrong value in `OPENAI_API_KEY` in `.env` and run `make up` again (it recreates the middleware). `curl localhost:8000/ready` now answers 503 with `"reason": "upstream returned 401"`, `make smoke` fails, and the page has no models to select, because Open WebUI cannot fetch the list. Restore the key and run `make up` once more.
 
 ## Configuration
 
