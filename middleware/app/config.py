@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import NonNegativeInt, SecretStr
 from pydantic_settings import BaseSettings
 
 # Resolved from this file's location so it works from any working directory.
@@ -20,4 +20,6 @@ class Settings(BaseSettings):
     upstream_connect_timeout_seconds: float = 10.0
     # Time allowed between two chunks from upstream, not for the whole response.
     upstream_read_timeout_seconds: float = 120.0
+    # Extra attempts when a connection to upstream cannot be opened.
+    upstream_connect_retries: NonNegativeInt = 2
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"

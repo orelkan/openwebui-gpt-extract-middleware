@@ -14,6 +14,10 @@ def create_upstream_client(settings: Settings) -> httpx.AsyncClient:
 
     It always authenticates with the middleware's own API key; credentials sent
     by the caller are never forwarded.
+
+    The transport retries only failed attempts to open a connection. Nothing
+    has reached upstream at that point, so a retry can never duplicate a
+    request. Failures after that are not retried.
     """
     return httpx.AsyncClient(
         base_url=settings.openai_base_url,
@@ -22,6 +26,7 @@ def create_upstream_client(settings: Settings) -> httpx.AsyncClient:
             settings.upstream_read_timeout_seconds,
             connect=settings.upstream_connect_timeout_seconds,
         ),
+        transport=httpx.AsyncHTTPTransport(retries=settings.upstream_connect_retries),
     )
 
 

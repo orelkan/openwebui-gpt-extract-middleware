@@ -44,3 +44,11 @@ def test_settings_rejects_unknown_log_level(monkeypatch: pytest.MonkeyPatch) -> 
 
     with pytest.raises(ValidationError):
         Settings()
+
+
+def test_settings_rejects_negative_connect_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("UPSTREAM_CONNECT_RETRIES", "-1")
+
+    with pytest.raises(ValidationError):
+        Settings()
