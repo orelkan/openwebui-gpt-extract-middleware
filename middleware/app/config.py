@@ -1,6 +1,7 @@
 """Application configuration, read from environment variables."""
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings
@@ -19,3 +20,4 @@ class Settings(BaseSettings):
     upstream_connect_timeout_seconds: float = 10.0
     # Time allowed between two chunks from upstream, not for the whole response.
     upstream_read_timeout_seconds: float = 120.0
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"

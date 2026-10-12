@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -8,6 +9,13 @@ from pydantic import SecretStr
 
 from app.config import Settings
 from app.main import create_app
+
+
+@pytest.fixture(autouse=True)
+def reset_app_logging() -> Iterator[None]:
+    """Drop the stdout handler that create_app installs, so it never outlives its test."""
+    yield
+    logging.getLogger("app").handlers = []
 
 
 @pytest.fixture

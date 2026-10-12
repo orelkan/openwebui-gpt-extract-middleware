@@ -36,3 +36,11 @@ def test_settings_repr_hides_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = Settings()
 
     assert "sk-test" not in repr(settings)
+
+
+def test_settings_rejects_unknown_log_level(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("LOG_LEVEL", "LOUD")
+
+    with pytest.raises(ValidationError):
+        Settings()
