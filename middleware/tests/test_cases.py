@@ -17,8 +17,8 @@ def extraction_reply(**changes: Any) -> str:
             {
                 "name": "due_date",
                 "value": "May 1",
-                "confidence": 0.6,
                 "uncertain": True,
+                "confidence": 0.6,
                 "note": "Year not stated",
             },
         ],
@@ -28,7 +28,7 @@ def extraction_reply(**changes: Any) -> str:
 
 
 CERTAIN_DUE_DATE = [
-    {"name": "due_date", "value": "May 1", "confidence": 0.95, "uncertain": False, "note": None}
+    {"name": "due_date", "value": "May 1", "uncertain": False, "confidence": 0.95, "note": None}
 ]
 
 

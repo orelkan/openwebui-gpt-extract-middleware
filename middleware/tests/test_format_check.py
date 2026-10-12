@@ -15,15 +15,15 @@ VALID: dict[str, Any] = {
         {
             "name": "invoice_number",
             "value": "42",
-            "confidence": 0.99,
             "uncertain": False,
+            "confidence": 0.99,
             "note": None,
         },
         {
             "name": "due_date",
             "value": "May 1",
-            "confidence": 0.6,
             "uncertain": True,
+            "confidence": 0.6,
             "note": "Year not stated",
         },
     ],

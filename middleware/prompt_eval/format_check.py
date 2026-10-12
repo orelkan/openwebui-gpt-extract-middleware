@@ -16,7 +16,10 @@ TOP_LEVEL_KEYS = [
     "fields",
     "warnings",
 ]
-FIELD_KEYS = ["name", "value", "confidence", "uncertain", "note"]
+# `uncertain` comes before `confidence` on purpose: the model writes keys in
+# order, and it is more consistent when it commits to the yes/no decision
+# before choosing a number.
+FIELD_KEYS = ["name", "value", "uncertain", "confidence", "note"]
 # A field is flagged uncertain exactly when its confidence is this or lower.
 UNCERTAIN_AT_OR_BELOW = 0.8
 

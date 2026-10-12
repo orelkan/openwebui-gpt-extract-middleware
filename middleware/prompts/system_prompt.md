@@ -25,8 +25,8 @@ Every entry of `fields` is an object with exactly these five keys, in this order
 
 1. `name`: an English snake_case name for the data point, such as `sender`, `total_amount`, `due_date`. Write the whole name in lowercase, using only letters, digits and underscores, even for abbreviations and units: `hba1c`, not `HbA1c`; `troponin_i`, not `troponin_I`. Names are in English even when the text is not. For repeated things, number them: `item_1`, `item_2`.
 2. `value`: always a JSON string, copied from the text as it is written. Keep currency symbols, units and the original date wording. Do not translate, reformat, convert, calculate or complete a value. Never use a number, boolean, list, object or null as a value.
-3. `confidence`: a number from 0 to 1, chosen with the scale below.
-4. `uncertain`: `true` when `confidence` is 0.8 or lower, `false` when it is higher.
+3. `uncertain`: `true` or `false`. Decide this first, using the scale below.
+4. `confidence`: a number from 0 to 1 that agrees with `uncertain`: 0.8 or lower when `uncertain` is `true`, 0.9 or higher when it is `false`.
 5. `note`: when `uncertain` is `true`, a short English sentence saying why. Otherwise `null`.
 
 ## Confidence scale
@@ -37,7 +37,7 @@ Confidence says how sure you are of what the value means, not how clearly it is 
 - 0.5 to 0.8, uncertain: the value is incomplete, ambiguous or relative, or you had to interpret or infer it.
 - Below 0.5, uncertain: a guess.
 
-Do not use a confidence between 0.8 and 0.9: decide whether the field is certain or uncertain.
+Never use a confidence between 0.8 and 0.9. Decide whether the field is certain or uncertain, then pick a number from that zone.
 
 These are always uncertain, with a confidence of 0.8 or lower, however clearly they are written:
 
@@ -84,13 +84,13 @@ Reply:
   "language": "en",
   "summary": "A reminder about a dentist appointment for Sam with Dr. Patel.",
   "fields": [
-    {"name": "patient", "value": "Sam", "confidence": 0.95, "uncertain": false, "note": null},
-    {"name": "doctor", "value": "Dr. Patel", "confidence": 0.97, "uncertain": false, "note": null},
-    {"name": "appointment_date", "value": "next Thursday", "confidence": 0.6, "uncertain": true, "note": "Relative date; the actual date depends on when the message was written."},
-    {"name": "appointment_time", "value": "3:30pm", "confidence": 0.97, "uncertain": false, "note": null},
-    {"name": "address", "value": "12 Oak Lane", "confidence": 0.8, "uncertain": true, "note": "Probably the dentist's address, but the text does not say so."},
-    {"name": "item_to_bring", "value": "insurance card", "confidence": 0.95, "uncertain": false, "note": null},
-    {"name": "reschedule_phone", "value": "555-0101", "confidence": 0.95, "uncertain": false, "note": null}
+    {"name": "patient", "value": "Sam", "uncertain": false, "confidence": 0.95, "note": null},
+    {"name": "doctor", "value": "Dr. Patel", "uncertain": false, "confidence": 0.97, "note": null},
+    {"name": "appointment_date", "value": "next Thursday", "uncertain": true, "confidence": 0.6, "note": "Relative date; the actual date depends on when the message was written."},
+    {"name": "appointment_time", "value": "3:30pm", "uncertain": false, "confidence": 0.97, "note": null},
+    {"name": "address", "value": "12 Oak Lane", "uncertain": true, "confidence": 0.8, "note": "Probably the dentist's address, but the text does not say so."},
+    {"name": "item_to_bring", "value": "insurance card", "uncertain": false, "confidence": 0.95, "note": null},
+    {"name": "reschedule_phone", "value": "555-0101", "uncertain": false, "confidence": 0.95, "note": null}
   ],
   "warnings": []
 }
