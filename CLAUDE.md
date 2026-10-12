@@ -204,7 +204,7 @@ Update the checkboxes as milestones are completed.
 - `SYSTEM_PROMPT.md`: the prompt, design choices, edge cases, and iteration notes.
 - Test guaranteeing the prompt used by the middleware matches `SYSTEM_PROMPT.md`.
 
-### [ ] Milestone 4: Containerization and local stack
+### [x] Milestone 4: Containerization and local stack
 - Middleware `Dockerfile` (slim image, non-root user, healthcheck).
 - `docker-compose.yml` with Open WebUI **v0.6.5**, PostgreSQL, and middleware: healthchecks, `depends_on` with `condition: service_healthy`, named volumes, single `.env` for configuration.
 - Open WebUI configured to use the middleware as its OpenAI base URL, with Ollama disabled and background task behavior handled per the decision from planning.
@@ -231,6 +231,7 @@ make test         # pytest with coverage report
 make check        # lint + typecheck + test
 make run          # run the middleware locally with reload (needs OPENAI_API_KEY)
 make samples      # run prompt samples against the live API (needs .env, spends credits)
-# run stack:      TBD (Milestone 4)
-# stop stack:     TBD (Milestone 4)
+make up           # build and start the whole stack, wait until healthy (needs .env)
+make down         # stop the stack, keeping its data
+make logs         # follow the middleware's logs
 ```

@@ -8,14 +8,16 @@ User → Open WebUI (v0.6.5) → Middleware (FastAPI) → OpenAI GPT
               └── Database (PostgreSQL, Open WebUI persistence)
 ```
 
-> **Status:** work in progress. The middleware and the extraction prompt are complete. The Docker stack that adds Open WebUI and PostgreSQL is not implemented yet.
+> **Status:** work in progress. The middleware, the extraction prompt and the Docker stack are complete. The smoke test script and the step-by-step verification guide are still to come.
 
 The prompt, its design and how it was tested are described in [SYSTEM_PROMPT.md](SYSTEM_PROMPT.md).
 
 ## Prerequisites
 
-- [uv](https://docs.astral.sh/uv/) (it downloads the pinned Python 3.12 on its own)
+- Docker with the Compose plugin, to run the stack
+- An OpenAI API key with credit
 - GNU Make
+- [uv](https://docs.astral.sh/uv/), only for development (it downloads the pinned Python 3.12 on its own)
 
 ## Development
 
@@ -34,6 +36,9 @@ make check       # lint, type check and tests, all at once
 | `make check` | `lint`, `typecheck` and `test` |
 | `make run` | Run the middleware locally with auto-reload on port 8000 |
 | `make samples` | Run the prompt's sample inputs against the live API (needs `.env`, spends credits) |
+| `make up` | Build and start the whole stack; returns when all three services are healthy |
+| `make down` | Stop the stack (data is kept) |
+| `make logs` | Follow the middleware's logs |
 
 The unit tests make no network calls and need no API key.
 
@@ -85,6 +90,8 @@ Logs are written to stdout as one JSON object per line. Every line of a request 
 | `request_completed` | The response was fully sent (status code, total latency). |
 
 The API key, `Authorization` headers and message contents are never logged; only message counts and lengths are.
+
+Requests to `/health` are logged at DEBUG, because the container healthcheck calls it every 30 seconds. Set `LOG_LEVEL=DEBUG` to see them.
 
 ## Failure handling
 
@@ -144,7 +151,55 @@ The middleware does not set model parameters; they are chosen per model in Open 
 
 ## Running the full stack
 
-To be written once the Docker stack exists.
+```bash
+cp .env.example .env          # then put your key in OPENAI_API_KEY
+make up
+```
+
+`make up` builds the middleware image, starts the three services and returns when all of them are healthy. Then open **http://localhost:3000**. There is no login, and `gpt-6-luna` is preselected.
+
+The first start takes a few minutes: Docker pulls the images (Open WebUI is about 6 GB) and Open WebUI downloads an embedding model into its volume. Later starts take about 20 seconds.
+
+| Service | Image | Reachable at | Data |
+|---|---|---|---|
+| `open-webui` | `ghcr.io/open-webui/open-webui:v0.6.5` | http://localhost:3000 | volume `open_webui_data` (files, embedding model) |
+| `middleware` | built from [middleware/Dockerfile](middleware/Dockerfile) | http://localhost:8000 | none |
+| `postgres` | `postgres:17-alpine` | inside the compose network only | volume `postgres_data` (chats, users, settings) |
+
+Open WebUI starts only after PostgreSQL and the middleware report healthy. Both published ports are bound to `127.0.0.1`.
+
+```bash
+make logs                     # follow the middleware's JSON logs
+docker compose ps             # status of the three services
+make down                     # stop; chats and settings are kept
+docker compose down -v        # stop and delete all stored data
+```
+
+### Stack configuration
+
+Everything is read from the same `.env`. Only `OPENAI_API_KEY` is required.
+
+| Variable | Default | Description |
+|---|---|---|
+| `DEFAULT_MODEL` | `gpt-6-luna` | Model preselected in Open WebUI |
+| `WEBUI_PORT` | `3000` | Host port of Open WebUI |
+| `MIDDLEWARE_PORT` | `8000` | Host port of the middleware |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | `openwebui` | Database credentials and name |
+| `WEBUI_SECRET_KEY` | `local-dev-secret` | Secret Open WebUI signs its session tokens with |
+
+The middleware variables from the "Configuration" table above are passed to its container as well, except `SYSTEM_PROMPT_PATH`: the image always uses the prompt built into it.
+
+### What is configured in Open WebUI, and why
+
+These are set in [docker-compose.yml](docker-compose.yml):
+
+- **The middleware is the only model backend**, and Ollama is disabled.
+- **PostgreSQL instead of the built-in SQLite file**, through `DATABASE_URL`.
+- **Background tasks are off** (title, tag, search query, retrieval query and autocomplete generation). Open WebUI sends them through the same chat endpoint, where they would receive the extraction prompt. The visible cost is that chats keep the title "New Chat".
+- **No login**, with a single local admin user.
+- **The compose file is applied on every start.** Open WebUI normally copies its settings into the database on first start and ignores the environment afterwards; that is switched off, so the repository always describes the running stack. Changes made in the admin Settings screens last until the next restart. Chats and per-model parameters are stored separately and persist.
+
+The model list shows everything OpenAI returns, including models that are not chat models.
 
 ## Verifying end to end
 
@@ -155,13 +210,17 @@ To be written once the Docker stack exists.
 This section grows with the project.
 
 - **The system prompt always goes first, and nothing the client sent is removed.** If Open WebUI sends its own system message, it stays in place after ours.
-- **Every chat completion request gets the prompt, with no special cases.** Open WebUI's background tasks (titles, tags) use the same endpoint, so they will be switched off in the Open WebUI configuration instead of being detected in the middleware.
+- **Every chat completion request gets the prompt, with no special cases.**
 - **Transparent pass-through.** Request fields the middleware does not know are forwarded unchanged, and upstream answers, errors included, are returned with their original status code and body.
 - **The middleware uses its own API key.** Any `Authorization` header sent by the caller is ignored and never forwarded. The middleware itself has no authentication, so it must only be reachable by Open WebUI.
 - **One shared HTTP client**, created at startup and closed at shutdown, so upstream connections are reused across requests.
 - **The prompt is read once at startup** from a file that contains nothing but the prompt.
 - **The prompt has one runtime copy and one documented copy, kept equal by a test.** The middleware loads `middleware/prompts/system_prompt.md`; `SYSTEM_PROMPT.md` embeds the same text and a unit test fails if they differ.
 - **The output format is enforced by the prompt alone.** The middleware does not validate or repair model replies; the format is checked by code only in the evaluation tooling under `middleware/prompt_eval`.
+- **Open WebUI's background tasks are disabled rather than detected.** The alternative was to recognise title and tag requests in the middleware and skip the prompt for them, which would rest on guessing from prompt text and would break "every request gets the prompt".
+- **PostgreSQL for persistence.** The assignment asks for a database service; Open WebUI supports PostgreSQL through one variable, and it keeps the data out of the application container.
+- **The middleware image holds only what runs.** A build stage installs the locked dependencies with uv; the final image has the virtualenv, the app and the prompt, and runs as a non-root user.
+- **Health probes are logged at DEBUG.** The container healthcheck calls `/health` every 30 seconds, which would otherwise bury real requests in the log.
 - **Readiness checks OpenAI, liveness does not.** `/ready` makes a real (free) call to list models, so it catches a wrong API key or an unreachable upstream. `/health` only says the process is alive, which is what a container healthcheck should use: an OpenAI outage must not make the container look dead.
 - **Upstream errors are always labelled as JSON.** OpenAI returns some JSON errors as `text/plain`. Open WebUI 0.6.5 only reads `error.message` from a response declared as JSON and otherwise shows the raw body.
 - **A stream that breaks is ended with an error event, not silently.** The 200 status has already been sent, so the failure is reported inside the stream, in a form Open WebUI 0.6.5 displays as an error.
