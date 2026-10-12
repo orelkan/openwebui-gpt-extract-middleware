@@ -1,5 +1,7 @@
 """Chat completions, proxied to upstream with the system prompt injected."""
 
+import json
+import logging
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -8,10 +10,12 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
+from app.logging import log_event
 from app.prompt import inject_system_prompt
 from app.upstream import passthrough_response
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class ChatCompletionRequest(BaseModel):
@@ -39,8 +43,30 @@ def build_upstream_payload(chat_request: ChatCompletionRequest, prompt: str) -> 
     return payload
 
 
+def stream_error_event() -> bytes:
+    """SSE bytes that tell the client the stream broke, then end it.
+
+    The leading blank line closes an event that may have been cut in half.
+    Open WebUI shows a `data:` line holding an `error` object as an error
+    message next to the partial answer.
+    """
+    error = {
+        "error": {
+            "message": "The upstream connection was lost before the answer was complete",
+            "type": "upstream_error",
+            "param": None,
+            "code": None,
+        }
+    }
+    return f"\n\ndata: {json.dumps(error)}\n\ndata: [DONE]\n\n".encode()
+
+
 async def stream_upstream_body(upstream_response: httpx.Response) -> AsyncGenerator[bytes, None]:
     """Yield the upstream body chunk by chunk, then release the upstream connection.
+
+    If upstream fails mid-stream, the status line is already sent and cannot
+    change, so the failure is reported inside the stream. It is never retried:
+    the client already has part of the answer.
 
     The finally block also runs when our client disconnects mid-stream, so an
     abandoned request does not keep its upstream connection open.
@@ -48,6 +74,16 @@ async def stream_upstream_body(upstream_response: httpx.Response) -> AsyncGenera
     try:
         async for chunk in upstream_response.aiter_bytes():
             yield chunk
+    except httpx.TransportError as error:
+        log_event(
+            logger,
+            "upstream_error",
+            level=logging.ERROR,
+            error_type=type(error).__name__,
+            status_code=upstream_response.status_code,
+            mid_stream=True,
+        )
+        yield stream_error_event()
     finally:
         await upstream_response.aclose()
 

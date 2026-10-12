@@ -8,7 +8,7 @@ import pytest
 import respx
 from fastapi.testclient import TestClient
 
-from app.routes.chat import stream_upstream_body
+from app.routes.chat import stream_error_event, stream_upstream_body
 
 COMPLETION = {
     "id": "chatcmpl-1",
@@ -26,6 +26,12 @@ SSE_CHUNKS = [
 async def sse_stream() -> AsyncIterator[bytes]:
     for chunk in SSE_CHUNKS:
         yield chunk
+
+
+async def broken_sse_stream() -> AsyncIterator[bytes]:
+    """An upstream stream that dies after its first chunk."""
+    yield SSE_CHUNKS[0]
+    raise httpx.ReadError("connection reset")
 
 
 def forwarded_body(route: respx.Route) -> Any:
@@ -274,3 +280,39 @@ def test_chat_completion_wraps_non_json_upstream_error_in_openai_format(
         "param": None,
         "code": None,
     }
+
+
+def test_streaming_chat_completion_reports_mid_stream_failure_inside_the_stream(
+    client: TestClient, upstream: respx.MockRouter, log_entries: list[dict[str, Any]]
+) -> None:
+    upstream.post("/chat/completions").mock(
+        return_value=httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, content=broken_sse_stream()
+        )
+    )
+
+    response = client.post(
+        "/v1/chat/completions",
+        json={"model": "gpt-4o-mini", "messages": [], "stream": True},
+    )
+
+    assert response.status_code == 200
+    assert response.content.startswith(SSE_CHUNKS[0])
+    events = [line[len("data: ") :] for line in response.text.splitlines() if line]
+    assert json.loads(events[-2])["error"]["type"] == "upstream_error"
+    assert events[-1] == "[DONE]"
+    logged_error = next(entry for entry in log_entries if entry["event"] == "upstream_error")
+    assert logged_error["error_type"] == "ReadError"
+    assert logged_error["mid_stream"] is True
+
+
+def test_stream_upstream_body_closes_upstream_after_mid_stream_failure() -> None:
+    upstream_response = httpx.Response(200, content=broken_sse_stream())
+
+    async def collect_chunks() -> list[bytes]:
+        return [chunk async for chunk in stream_upstream_body(upstream_response)]
+
+    received_chunks = asyncio.run(collect_chunks())
+
+    assert received_chunks == [SSE_CHUNKS[0], stream_error_event()]
+    assert upstream_response.is_closed
